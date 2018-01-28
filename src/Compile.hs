@@ -10,19 +10,10 @@ import Reg
 import Type
 import Pseudo
 import Asm
+import NewAst
 
 underscore = "_"
 reg_eax = 0
-
------ MAIN -----
-
-file = File [Func (FuncType (PrimType "int") [(PtrType $ PrimType "char", "v")]) "printf" [], Func (FuncType (PrimType "int") []) "main" [Expr $ Call (Name "printf") [Literal "hey"]]]
-
-compile :: File -> (Pseudo, Scope)
-compile = runCompiler . compileFile
-
-main :: IO ()
-main = putStr $ intercalate "\n" $ (uncurry toAsm) $ compile file
 
 ----- ENVIRONMENT -----
 
@@ -57,6 +48,19 @@ envSetScope s (a, r, _) = (a, r, s)
 
 type Error = String
 data Compiler a = C (Env -> Either (Env, a) Error)
+
+instance Functor Compiler where
+    fmap f (C a) = C $ \ inp -> case a inp of
+        Left (inp', r) -> Left (inp', f r)
+        Right e -> Right e
+        
+instance Applicative Compiler where
+    pure x = C $ \ inp -> Left (inp, x)
+    (<*>) (C a) (C b) = C $ \ inp -> case a inp of
+        Left (inp', f) -> case b inp' of
+            Left (inp'', r) -> Left (inp'', f r)
+            Right e -> Right e
+        Right e -> Right e
 
 instance Monad Compiler where
     return x = C $ \ inp -> Left (inp, x)
@@ -130,11 +134,6 @@ setScope s = C $ \ env -> Left (envSetScope s env, ())
 
 ----- COMPLIE -----
 
-data File = File [Symb]
-data Symb = FunDecl Type String | Func Type String [Stmt] | VarDecl Type String Bool | Init Type String Expr
-data Stmt = If Expr Stmt Stmt | Nop | Expr Expr | Block [Stmt] | LocVar Type String Bool
-data Expr = Number Integer | Name String | App String [Expr] | Call Expr [Expr] | Literal String
-
 compileFile :: File -> Compiler ()
 compileSymb :: Symb -> Compiler ()
 compileStmt :: Stmt -> Compiler ()
@@ -179,7 +178,9 @@ compileStmt Nop = return ()
 compileStmt (Expr expr) = compileExpr expr >> freeReg >> return ()
 
 compileExpr (Literal s) = do
-    
+    reg <- getReg
+    addLine $ LoadLit reg s
+    return (reg, PtrType $ PrimType "char")
 
 compileExpr (Number x) = do
     reg <- getReg

@@ -42,7 +42,7 @@ parseDeclRight (x:xs) start l r
             in (ArrayType arrType arrSize, end)
     | otherwise = parseDeclLeft (x:xs) start l (r + 1)
 
-parseDeclArr :: [String] -> Int -> (Integer, Int)
+parseDeclArr :: [String] -> Int -> (Int, Int)
 parseDeclArr (x:xs) i
     | (x:xs) !! i == "]" = (0, i + 1)
     | all isDigit $ (x:xs) !! i = (read $ (x:xs) !! i, i + 2)
