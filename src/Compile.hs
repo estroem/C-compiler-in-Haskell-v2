@@ -161,14 +161,14 @@ compileStmt (Block body) = do
     loop compileStmt body
     setScope sc
 
-compileStmt (LocVar typ name _) = addLoc $ Var name typ Nothing True
+compileStmt (LocVar typ name _ e) = addLoc $ Var name typ (fmap evaluate e) True
 
 compileStmt (If cond st1 st2) = do
     (reg, _) <- compileExpr cond
     addLine $ Cmp reg
     addLine $ Je "else"
     compileStmt st1
-    addLine $ Jmp "else"
+    addLine $ Jmp "end"
     addLine $ Label "else"
     compileStmt st2
     addLine $ Label "end"
@@ -262,7 +262,7 @@ fixPtrOffset reg1 typ =
 
 countLocals :: [Stmt] -> Int
 countLocals [] = 0
-countLocals ((LocVar typ _ False):xs) = getTypeSize typ + countLocals xs
+countLocals ((LocVar typ _ False _):xs) = getTypeSize typ + countLocals xs
 countLocals ((Block e):xs) = countLocals e + countLocals xs
 countLocals ((If _ e1 e2):xs) = countLocals [e1] + countLocals [e2] + countLocals xs
 countLocals (_:xs) = countLocals xs
