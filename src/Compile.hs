@@ -1,4 +1,4 @@
-module Compile ( runCompiler, compileFile ) where
+module Compile ( runCompiler, compileFile, compile ) where
 
 import Data.Maybe
 import Data.List
@@ -11,6 +11,9 @@ import Type
 import Pseudo
 import Asm
 import NewAst
+
+compile :: File -> (Pseudo, Scope)
+compile = runCompiler . compileFile
 
 underscore = "_"
 reg_eax = 0

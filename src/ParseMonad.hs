@@ -1,17 +1,21 @@
-module ParseMonad ( parse ) where
+module ParseMonad ( parseMonad ) where
 
 import Data.Char
+import Data.List
 
 import NewAst
 import Type
 
-data Parser a = P (String -> Maybe (String, a))
+data Parser a = P ([String] -> Maybe ([String], a))
+
+parseMonad :: [String] -> File
+parseMonad s = maybe (error "") snd $ parse file s
 
 instance Functor Parser where
     fmap f (P p) = P $ \ inp -> case p inp of
         Just (inp', x) -> Just (inp', f x)
         Nothing -> Nothing
-{-
+
 instance Applicative Parser where
     pure x = P $ \ inp -> Just (inp, x)
     (<*>) (P a) (P b) = P $ \ inp -> case a inp of
@@ -19,7 +23,7 @@ instance Applicative Parser where
             Just (inp'', x) -> Just (inp'', f x)
             Nothing -> Nothing
         Nothing -> Nothing
--}
+
 instance Monad Parser where
     return x = P $ \ inp -> Just (inp, x)
     (>>=) (P a) f = P $ \ inp -> case a inp of
@@ -29,17 +33,22 @@ instance Monad Parser where
 failure :: Parser a
 failure = P $ \ _ -> Nothing
 
-parse :: Parser a -> String -> a
-parse (P p) inp = maybe (error "fail") snd $ p inp
+parse :: Parser a -> [String] -> Maybe ([String], a)
+parse (P p) inp = p inp
 
-getState :: Parser String
+getState :: Parser [String]
 getState = P $ \ inp -> Just (inp, inp)
 
-setState :: String -> Parser ()
+setState :: [String] -> Parser ()
 setState s = P $ \ inp -> Just (s, ())
 
+--(<*) :: Parser a -> Parser b -> Parser a
+--(<*) a b = a >>= \ r -> b >> return r
+
 (<|>) :: Parser a -> Parser a -> Parser a
-(<|>) (P a) (P b) = P $ \ inp -> maybe (b inp) Just $ a inp
+(<|>) (P a) (P b) = P $ \ inp -> case a inp of
+    Just r -> Just r
+    Nothing -> b inp
 
 many :: Parser a -> Parser [a]
 many p = many1 p <|> return []
@@ -60,30 +69,21 @@ sep1 s p = do
     return $ f:r
 
 file :: Parser File
-file = ws >> sep ws symb >>= return . File
+file = File <$> many symb
 
 symb :: Parser Symb
-symb = do
-    r <- (do
-            r' <- (initVar <|> gloVar <|> func)
-            ws >> semi
-            return r'
-        ) <|> funcDecl
-    return r
+symb = func <|> ((funcDecl <|> initVar <|> gloVar) <* semi)
 
 gloVar :: Parser Symb
 gloVar = do
     t <- typ
-    ws
     n <- identifier
     return $ VarDecl t n False
 
 initVar :: Parser Symb
 initVar = do
     (VarDecl t n _) <- gloVar
-    ws
     char '='
-    ws
     e <- expr
     return $ Init t n e
 
@@ -91,25 +91,26 @@ funcDecl :: Parser Symb
 funcDecl = do
     t <- typ
     n <- identifier
-    ws
-    args <- parens $ sep (ws >> char ',' >> ws) $ do
+    args <- parens $ sep (char ',') $ do
         t' <- typ
         n' <- identifier
         return (t', n')
-    return $ FunDecl t n
+    return $ FunDecl (FuncType t []) n
 
 func :: Parser Symb
 func = do
     (FunDecl t n) <- funcDecl
-    ws
     b <- block
-    return $ Func t n [b]
+    return $ Func (FuncType t []) n [b]
 
 block :: Parser Stmt
-block = ws >> (braces $ many stmt >>= return . Block)
+block = Block <$> (braces $ many stmt)
 
 stmt :: Parser Stmt
-stmt = ws >> (block <|> if' <|> (gloVar >>= \ (VarDecl t n _) -> return $ LocVar t n False Nothing) <|> (expr >>= return . Expr))
+stmt = block <|> if'
+    <|> (gloVar <* semi >>= \ (VarDecl t n _) -> return $ LocVar t n False Nothing)
+    <|> (initVar <* semi >>= \ (Init t n e) -> return $ LocVar t n False $ Just e)
+    <|> (Expr <$> expr <* semi)
 
 if' :: Parser Stmt
 if' = do
@@ -121,10 +122,38 @@ if' = do
     return $ If c s1 s2
 
 expr :: Parser Expr
-expr = number <|> name <|> app
+expr = binAppR ["="] disjuction
+
+disjuction :: Parser Expr
+disjuction = binAppR ["||"] conjunction
+
+conjunction :: Parser Expr
+conjunction = binAppR ["&&"] relation
+
+relation :: Parser Expr
+relation = binAppR ["==", "!="] summation
+
+summation :: Parser Expr
+summation = binAppR ["+", "-"] term
+
+term :: Parser Expr
+term = binAppR ["*", "/"] (number <|> name)
+
+binAppR :: [String] -> Parser Expr -> Parser Expr
+binAppR s p = do
+    e1 <- p
+    (do
+        op <- oneOf (map string s)
+        e2 <- binAppR s p
+        return $ App op [e1, e2]
+     ) <|> return e1
 
 semi :: Parser ()
 semi = char ';' >> return ()
+
+oneOf :: [Parser a] -> Parser a
+oneOf [] = failure
+oneOf (x:xs) = x <|> oneOf xs
 
 parens :: Parser a -> Parser a
 parens p = do
@@ -142,10 +171,8 @@ braces p = do
     
 literal :: Parser Expr
 literal = do
-    char '"'
-    s <- many $ cond (/='"') single
-    char '"'
-    return $ Literal $ '"':s
+    s <- cond (\ t -> head t == '"') single
+    return $ Literal $ tail s
 
 call :: Parser Expr
 call = do
@@ -155,32 +182,26 @@ call = do
 
 app :: Parser Expr
 app = do
-    x <- expr
+    x <- number
     s <- single
-    y <- expr
-    return $ App [s] [x, y]
+    y <- number
+    return $ App s [x, y]
 
 name :: Parser Expr
-name = ws >> identifier >>= return . Name
+name = identifier >>= return . Name
 
 number :: Parser Expr
-number = ws >> many digit >>= return . Number . read
+number = cond (all isDigit) single >>= return . Number . read
     
 identifier :: Parser String
-identifier = ws >> (many $ cond isAlpha single)
-    
-keyword :: String -> Parser String
-keyword s = ws >> string s
+identifier = cond (all isAlphaNum) single
 
 typ :: Parser Type
-typ = ws >> string "int" >> (return $ PrimType "int")
+typ = string "int" >> (return $ PrimType "int")
 
-digit :: Parser Char
-digit = cond isDigit single
-
-single :: Parser Char
+single :: Parser String
 single = P $ \ inp ->
-    if inp /= ""
+    if inp /= []
         then Just (tail inp, head inp)
         else Nothing
 
@@ -195,11 +216,10 @@ cond f p = do
             failure
     
 string :: String -> Parser String
-string [] = return ""
-string str@(x:xs) = char x >> (string xs) >> (return str)
+string s = cond (==s) single
     
-char :: Char -> Parser ()
-char c = cond (==c) single >> return ()
+char :: Char -> Parser Char
+char c = cond (==[c]) single >>= return . head
 
 ws :: Parser ()
 ws = (many $ char ' ' <|>  char '\t' <|> char '\n') >> return ()
