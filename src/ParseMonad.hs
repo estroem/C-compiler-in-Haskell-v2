@@ -3,6 +3,7 @@ module ParseMonad ( parseMonad ) where
 import Data.Char
 import Data.List
 
+import Tokenize
 import NewAst
 import Type
 
@@ -50,6 +51,11 @@ setState s = P $ \ inp -> Just (s, ())
     Just r -> Just r
     Nothing -> b inp
 
+stop :: Parser a -> Parser ()
+stop (P p) = P $ \ inp -> case p inp of
+        Just _ -> Nothing
+        Nothing -> Just (inp, ())
+
 many :: Parser a -> Parser [a]
 many p = many1 p <|> return []
     
@@ -76,8 +82,7 @@ symb = func <|> ((funcDecl <|> initVar <|> gloVar) <* semi)
 
 gloVar :: Parser Symb
 gloVar = do
-    t <- typ
-    n <- identifier
+    (t, n) <- decl
     return $ VarDecl t n False
 
 initVar :: Parser Symb
@@ -89,12 +94,7 @@ initVar = do
 
 funcDecl :: Parser Symb
 funcDecl = do
-    t <- typ
-    n <- identifier
-    args <- parens $ sep (char ',') $ do
-        t' <- typ
-        n' <- identifier
-        return (t', n')
+    (t, n) <- decl
     return $ FunDecl (FuncType t []) n
 
 func :: Parser Symb
@@ -185,13 +185,61 @@ name :: Parser Expr
 name = Name <$> identifier
 
 number :: Parser Expr
-number = Number <$> read <$> cond (all isDigit) single
+number = Number <$> int
     
 identifier :: Parser String
 identifier = cond (all isAlphaNum) single
 
+decl :: Parser (Type, String)
+decl = do
+    p <- PrimType <$> oneOf (string <$> prims)
+    (t, n) <- innerDecl
+    return (addType t p, n)
+
+innerDecl :: Parser (Type, String)
+innerDecl = do
+    x <- length <$> (many $ char '*')
+    (t, n) <- (identifier >>= \ n -> return (EmptyType, n)) <|> parens innerDecl <|> return (EmptyType, "")
+    a <- many $ oneOf [funcType, arrType]
+    return (addType t (createType x a), n)
+
+funcType :: Parser Type
+funcType = do
+    char '('
+    a <- sep (char ',') decl
+    char ')'
+    return $ FuncType EmptyType a
+
+arrType :: Parser Type
+arrType = (char '[') >> ((ArrayType EmptyType) <$> fromInteger <$> int) <* (char ']')
+
+createType :: Int -> [Type] -> Type
+createType 0 [] = EmptyType
+createType p [] = PtrType $ createType (p-1) []
+createType p ((ArrayType _ n):xs) = ArrayType (createType p xs) n
+createType p ((FuncType _ a):xs) = FuncType (createType p xs) a
+    
+{-
+varRec :: Parser (Type, String)
+varRec = (identifier >>= \ n -> return (EmptyType, n) <* stop (char '(' <|> char '['))
+    <|> ptrType
+    
+primType :: Parser Type
+primType = PrimType <$> oneOf (fmap string prims)
+
+ptrType :: Parser (Type, String)
+ptrType = char '*' >> varRec
+
 typ :: Parser Type
 typ = string "int" >> (return $ PrimType "int")
+-}
+
+peek :: Parser a -> Parser a
+peek p = do
+    st <- getState
+    r <- p
+    setState st
+    return r
 
 single :: Parser String
 single = P $ \ inp ->
@@ -209,11 +257,20 @@ cond f p = do
             setState st
             failure
     
+int :: Parser Integer
+int = read <$> cond (all isDigit) single
+
 string :: String -> Parser String
 string s = cond (==s) single
     
 char :: Char -> Parser Char
 char c = cond (==[c]) single >>= return . head
 
-ws :: Parser ()
-ws = (many $ char ' ' <|>  char '\t' <|> char '\n') >> return ()
+addType :: Type -> Type -> Type
+addType (PrimType _) _ = error "Cannot add to primitive type"
+addType EmptyType b = b
+addType (PtrType a) b = (PtrType (addType a b))
+addType (FuncType a c) b = (FuncType (addType a b) c)
+addType (ArrayType a i) b = (ArrayType (addType a b) i)
+
+prims = ["int", "short", "char", "long"]
