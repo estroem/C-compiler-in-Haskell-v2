@@ -107,11 +107,12 @@ block :: Parser Stmt
 block = Block <$> (braces $ many stmt)
 
 stmt :: Parser Stmt
-stmt = block <|> if'
-    <|> (gloVar <* semi >>= \ (VarDecl t n _) -> return $ LocVar t n False Nothing)
-    <|> (initVar <* semi >>= \ (Init t n e) -> return $ LocVar t n False $ Just e)
-    <|> (Expr <$> expr <* semi)
+stmt = block <|> if' <|> locVar <|> (Expr <$> expr <* semi)
 
+locVar :: Parser Stmt
+locVar = (gloVar <* semi >>= \ (VarDecl t n _) -> return $ LocVar t n False Nothing)
+    <|> (initVar <* semi >>= \ (Init t n e) -> return $ LocVar t n False $ Just e)
+    
 if' :: Parser Stmt
 if' = do
     string "if"
@@ -137,7 +138,7 @@ summation :: Parser Expr
 summation = binAppR ["+", "-"] term
 
 term :: Parser Expr
-term = binAppR ["*", "/"] (number <|> name)
+term = binAppR ["*", "/"] (call <|> number <|> name <|> literal)
 
 binAppR :: [String] -> Parser Expr -> Parser Expr
 binAppR s p = do
@@ -168,7 +169,7 @@ braces p = do
     r <- p
     char '}'
     return r
-    
+
 literal :: Parser Expr
 literal = do
     s <- cond (\ t -> head t == '"') single
@@ -176,22 +177,15 @@ literal = do
 
 call :: Parser Expr
 call = do
-    e <- expr
+    e <- name <|> parens expr
     a <- parens $ sep (char ',') expr
     return $ Call e a
 
-app :: Parser Expr
-app = do
-    x <- number
-    s <- single
-    y <- number
-    return $ App s [x, y]
-
 name :: Parser Expr
-name = identifier >>= return . Name
+name = Name <$> identifier
 
 number :: Parser Expr
-number = cond (all isDigit) single >>= return . Number . read
+number = Number <$> read <$> cond (all isDigit) single
     
 identifier :: Parser String
 identifier = cond (all isAlphaNum) single
