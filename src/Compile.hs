@@ -65,6 +65,12 @@ instance Applicative Compiler where
             Right e -> Right e
         Right e -> Right e
 
+instance Alternative Compiler where
+    empty = C $ \ _ -> Right ""
+    (<|>) (C a) (C b) = C $ \ inp -> case a inp of
+        Left r -> Left r
+        Right e -> b inp
+        
 instance Monad Compiler where
     return x = C $ \ inp -> Left (inp, x)
     (>>=) (C a) b = C $ \ inp -> case a inp of
@@ -117,6 +123,11 @@ getFun name = do
     sc <- getScope
     maybe (failure $ "Function does not exist: " ++ name) return $ scopeGetFun sc name
 
+getVarOffset :: String -> Compiler Int
+getVarOffset n = do
+    sc <- getScope
+    maybe (failure $ "Var not local: " ++ n) return $ getOffset sc n
+    
 addGlo :: Var -> Compiler ()
 addGlo var = getScope >>= setScope . flip scopeAddGlo var
 
@@ -164,7 +175,11 @@ compileStmt (Block body) = do
     loop compileStmt body
     setScope sc
 
-compileStmt (LocVar typ name _ e) = addLoc $ Var name typ (fmap evaluate e) True
+compileStmt (LocVar typ name _ e) = do
+    addLoc $ Var name typ Nothing True
+    case e of
+        Just ex -> compileExpr (App "=" [Name name, ex]) >> return ()
+        Nothing -> return ()
 
 compileStmt (If cond st1 st2) = do
     (reg, _) <- compileExpr cond
@@ -191,11 +206,15 @@ compileExpr (Number x) = do
     return (reg, fromJust $ getIntType x)
 
 compileExpr (Name name) = do
-    exists <- varExists name
-    failIf (not exists) $ "Missing variable " ++ show name
     reg <- getReg
-    addLine $ Load reg name
-    typ <- getVarType name
+    (do
+        i <- getVarOffset name
+        addLine $ LoadLoc reg $ toInteger i
+     ) <|> (do
+        getVarType name <|> getFunType name
+        addLine $ Load reg name
+     )
+    typ <- getVarType name <|> getFunType name
     return (reg, typ)
 
 compileExpr (App "+" [expr1, expr2]) = do
@@ -208,6 +227,18 @@ compileExpr (App "+" [expr1, expr2]) = do
     addLine $ Add reg1 reg2
     freeReg
     return (reg1, fromJust retType)
+
+compileExpr (App "=" [Name name, expr]) = do
+    (reg, typ) <- compileExpr expr
+    varTyp <- getVarType name
+    failIf (getType "=" varTyp typ == Nothing) "Incompatible types"
+    (do
+        i <- toInteger <$> getVarOffset name
+        addLine $ SaveLoc i reg
+     ) <|> (do
+        addLine $ Save name reg $ toInteger $ getTypeSize varTyp
+     )
+    return (reg, varTyp)
 
 compileExpr (App sym [expr]) = do
     (reg, typ) <- compileExpr expr

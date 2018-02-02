@@ -9,6 +9,8 @@ import Data.Maybe
 
 import Type
 
+data Scp = Glo | Stc | Par | Loc
+
 data Var = Var
     { varName :: String
     , varType :: Type

@@ -1,4 +1,4 @@
-module Type ( Type (..), getIntType, canCast, getType, getTypeSize, isPrimitive, getPtrType ) where
+module Type ( Type (..), getIntType, canCast, getType, getTypeSize, isPrimitive, getPtrType, addType ) where
 
 import Data.Maybe
 import Data.List
@@ -115,3 +115,10 @@ getPtrType :: Type -> Maybe Type
 getPtrType (PtrType t) = Just t
 getPtrType (ArrayType t _) = Just t
 getPtrType _ = Nothing
+
+addType :: Type -> Type -> Type
+addType (PrimType _) _ = error "Cannot add to primitive type"
+addType EmptyType b = b
+addType (PtrType a) b = (PtrType (addType a b))
+addType (FuncType a c) b = (FuncType (addType a b) c)
+addType (ArrayType a i) b = (ArrayType (addType a b) i)

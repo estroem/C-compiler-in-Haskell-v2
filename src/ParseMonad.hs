@@ -192,14 +192,16 @@ identifier = cond (all isAlphaNum) single
 
 decl :: Parser (Type, String)
 decl = do
-    p <- PrimType <$> oneOf (string <$> prims)
+    p <- PrimType <$> cond isPrimitive single
     (t, n) <- innerDecl
     return (addType t p, n)
 
 innerDecl :: Parser (Type, String)
 innerDecl = do
     x <- length <$> (many $ char '*')
-    (t, n) <- (identifier >>= \ n -> return (EmptyType, n)) <|> parens innerDecl <|> return (EmptyType, "")
+    (t, n) <- (identifier >>= \ n -> return (EmptyType, n))
+        <|> parens innerDecl
+        <|> return (EmptyType, "")
     a <- many $ oneOf [funcType, arrType]
     return (addType t (createType x a), n)
 
@@ -218,21 +220,6 @@ createType 0 [] = EmptyType
 createType p [] = PtrType $ createType (p-1) []
 createType p ((ArrayType _ n):xs) = ArrayType (createType p xs) n
 createType p ((FuncType _ a):xs) = FuncType (createType p xs) a
-    
-{-
-varRec :: Parser (Type, String)
-varRec = (identifier >>= \ n -> return (EmptyType, n) <* stop (char '(' <|> char '['))
-    <|> ptrType
-    
-primType :: Parser Type
-primType = PrimType <$> oneOf (fmap string prims)
-
-ptrType :: Parser (Type, String)
-ptrType = char '*' >> varRec
-
-typ :: Parser Type
-typ = string "int" >> (return $ PrimType "int")
--}
 
 peek :: Parser a -> Parser a
 peek p = do
@@ -265,12 +252,3 @@ string s = cond (==s) single
     
 char :: Char -> Parser Char
 char c = cond (==[c]) single >>= return . head
-
-addType :: Type -> Type -> Type
-addType (PrimType _) _ = error "Cannot add to primitive type"
-addType EmptyType b = b
-addType (PtrType a) b = (PtrType (addType a b))
-addType (FuncType a c) b = (FuncType (addType a b) c)
-addType (ArrayType a i) b = (ArrayType (addType a b) i)
-
-prims = ["int", "short", "char", "long"]
