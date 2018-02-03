@@ -134,6 +134,9 @@ addGlo var = getScope >>= setScope . flip scopeAddGlo var
 addStc :: Var -> Compiler ()
 addStc var = getScope >>= setScope . flip scopeAddStc var
 
+addPar :: Var -> Compiler ()
+addPar var = getScope >>= setScope . flip scopeAddPar var
+
 addLoc :: Var -> Compiler ()
 addLoc var = getScope >>= setScope . flip scopeAddLoc var
 
@@ -166,6 +169,7 @@ compileSymb (Func (FuncType retType args) name body) = do
     addLines [Label $ underscore ++ name, Push reg_ebp, MovReg reg_ebp reg_esp]
     when (numLocals > 0) $ addLine $ SubConst reg_esp $ toInteger numLocals
     sc <- getScope
+    loop addPar $ map (\ (t, n) -> Var n t Nothing True) args
     loop compileStmt body
     setScope sc
     addLine $ Ret name
@@ -211,10 +215,10 @@ compileExpr (Name name) = do
         i <- getVarOffset name
         addLine $ LoadLoc reg $ toInteger i
      ) <|> (do
-        getVarType name <|> getFunType name
+        getFunType name <|> getVarType name
         addLine $ Load reg name
      )
-    typ <- getVarType name <|> getFunType name
+    typ <- getVarType name <|> (PtrType <$> getFunType name)
     return (reg, typ)
 
 compileExpr (App "+" [expr1, expr2]) = do
@@ -231,7 +235,7 @@ compileExpr (App "+" [expr1, expr2]) = do
 compileExpr (App "=" [Name name, expr]) = do
     (reg, typ) <- compileExpr expr
     varTyp <- getVarType name
-    failIf (getType "=" varTyp typ == Nothing) "Incompatible types"
+    failIf (not $ canCast varTyp typ) $ "Incompatible types: " ++ show typ ++ " and " ++ show varTyp
     (do
         i <- toInteger <$> getVarOffset name
         addLine $ SaveLoc i reg

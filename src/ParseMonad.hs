@@ -95,13 +95,13 @@ initVar = do
 funcDecl :: Parser Symb
 funcDecl = do
     (t, n) <- decl
-    return $ FunDecl (FuncType t []) n
+    return $ FunDecl t n
 
 func :: Parser Symb
 func = do
     (FunDecl t n) <- funcDecl
     b <- block
-    return $ Func (FuncType t []) n [b]
+    return $ Func t n [b]
 
 block :: Parser Stmt
 block = Block <$> (braces $ many stmt)
