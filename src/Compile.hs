@@ -1,4 +1,4 @@
-module Compile ( runCompiler, compileFile, compile ) where
+module Compile ( compile ) where
 
 import Data.Maybe
 import Data.List
@@ -10,7 +10,7 @@ import Reg
 import Type
 import Pseudo
 import Asm
-import NewAst
+import Ast
 import qualified Id
 
 compile :: File -> (Pseudo, Scope)

@@ -14,12 +14,12 @@ import System.Environment
 import Tokenize
 import Compile
 import Asm
-import ParseMonad
+import Parse
 
 --- COMPILE
 
 run :: String -> Asm
-run = (uncurry toAsm) . runCompiler . compileFile . parseMonad . tokenize
+run = (uncurry toAsm) . compile . parse . tokenize
 
 --- MAIN
 
