@@ -251,6 +251,17 @@ compileStmt (While cond body) = do
 
 compileStmt Nop = return ()
 
+compileStmt (Return Nothing) = getFuncId >>= addLine . Ret
+
+compileStmt (Return (Just e)) = do
+    (reg, typ) <- compileExpr e
+    id <- getFuncId
+    retType <- funRetType <$> getFun id
+    failIf (not $ canCast retType typ) "Incompatible types"
+    when (reg /= reg_eax) $ addLine $ MovReg reg_eax reg
+    addLine $ Ret id
+    freeReg
+
 compileStmt (Expr expr) = compileExpr expr >> freeReg >> return ()
 
 compileExpr (Literal s) = do

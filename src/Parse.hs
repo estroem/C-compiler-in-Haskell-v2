@@ -105,7 +105,7 @@ block :: Parser Stmt
 block = Block <$> (braces $ many stmt)
 
 stmt :: Parser Stmt
-stmt = block <|> if' <|> while <|> locVar <|> (Expr <$> expr <* semi)
+stmt = block <|> if' <|> while <|> locVar <|> (return' <* semi) <|> (Expr <$> expr <* semi)
 
 locVar :: Parser Stmt
 locVar = (gloVar <* semi >>= \ (VarDecl t n _) -> return $ LocVar t n False Nothing)
@@ -121,6 +121,9 @@ if' = do
 
 while :: Parser Stmt
 while = (string "while") >> While <$> (parens expr) <*> stmt
+
+return' :: Parser Stmt
+return' = string "return" >> Return <$> (Just <$> expr) <|> return Nothing
 
 expr :: Parser Expr
 expr = binAppR ["="] disjuction
