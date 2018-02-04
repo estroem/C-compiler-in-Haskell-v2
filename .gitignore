@@ -1,4 +1,5 @@
 obj/*
+old/*
 *.exe
 *.obj
 *.c
