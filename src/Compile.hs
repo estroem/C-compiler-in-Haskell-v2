@@ -275,6 +275,10 @@ compileExpr (App sym [expr1, expr2]) = do
         "/" -> addLine $ Div reg1 reg2
         "==" -> addLines [Sub reg1 reg2, Setz reg1, AndConst reg1 1]
         "!=" -> addLine $ Sub reg1 reg2
+        ">" -> addLines [Sub reg1 reg2, Setg reg1, AndConst reg1 1]
+        "<" -> addLines [Sub reg1 reg2, Setl reg1, AndConst reg1 1]
+        ">=" -> addLines [Sub reg1 reg2, Setge reg1, AndConst reg1 1]
+        "<=" -> addLines [Sub reg1 reg2, Setle reg1, AndConst reg1 1]
     freeReg
     return (reg1, fromJust retType)
     
@@ -315,7 +319,7 @@ handleSummation s expr1 expr2 = do
     return (reg1, fromJust retType)
 
 handleCallArgs :: [Expr] -> Compiler ()
-handleCallArgs = loop $ \ x -> compileExpr x >>= addLine <$> Push <$> fst >> freeReg
+handleCallArgs = loop (\ x -> compileExpr x >>= addLine <$> Push <$> fst >> freeReg) . reverse
     
 fixPtrOffset :: Reg -> Type -> Compiler ()
 fixPtrOffset reg1 typ =

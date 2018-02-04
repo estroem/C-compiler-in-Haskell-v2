@@ -49,6 +49,11 @@ getType sym l r = case sym of
         _ -> error "Can not dereference non-pointer type"
     "&" -> Just $ PtrType l
     "!=" -> Just $ PrimType "int"
+    "==" -> Just $ PrimType "int"
+    "<" -> Just $ PrimType "int"
+    ">" -> Just $ PrimType "int"
+    "<=" -> Just $ PrimType "int"
+    ">=" -> Just $ PrimType "int"
 
 getMulType :: Type -> Type -> Maybe Type
 getMulType (PtrType _) _ = Nothing

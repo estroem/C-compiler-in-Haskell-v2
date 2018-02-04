@@ -135,7 +135,7 @@ conjunction :: Parser Expr
 conjunction = binAppR ["&&"] relation
 
 relation :: Parser Expr
-relation = binAppR ["==", "!="] summation
+relation = binAppR ["==", "!=", "<", ">", "<=", ">="] summation
 
 summation :: Parser Expr
 summation = binAppR ["+", "-"] term
