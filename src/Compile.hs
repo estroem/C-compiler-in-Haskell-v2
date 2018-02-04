@@ -11,6 +11,7 @@ import Type
 import Pseudo
 import Asm
 import NewAst
+import qualified Id
 
 compile :: File -> (Pseudo, Scope)
 compile = runCompiler . compileFile
@@ -20,32 +21,37 @@ reg_eax = 0
 
 ----- ENVIRONMENT -----
 
-type Env = (Pseudo, Reg, Scope)
-type Id = Int
+type Env = (Pseudo, Reg, Scope, Id.Id)
 
 startReg = 0
-emptyEnv = ([], startReg, emptyScope)
+emptyEnv = ([], startReg, emptyScope, ([], 0))
 
 envGetAsm :: Env -> Pseudo
-envGetAsm (s, _, _) = s
+envGetAsm (s, _, _, _) = s
 
 getRegFromEnv :: Env -> Reg
-getRegFromEnv (_, r, _) = r
+getRegFromEnv (_, r, _, _) = r
 
 envFreeReg :: Env -> Env
-envFreeReg (a, r, s) = (a, r - 1, s)
+envFreeReg (a, r, s, i) = (a, r - 1, s, i)
 
 addLineToEnv :: PseudoLine -> Env -> Env
-addLineToEnv l (xs, r, s) = (xs++[l], r, s)
+addLineToEnv l (xs, r, s, i) = (xs++[l], r, s, i)
 
 nextReg :: Env -> Env
-nextReg (env, r, s) = (env, r + 1, s)
+nextReg (env, r, s, i) = (env, r + 1, s, i)
 
 envGetScope :: Env -> Scope
-envGetScope (_, _, s) = s
+envGetScope (_, _, s, _) = s
 
 envSetScope :: Scope -> Env -> Env
-envSetScope s (a, r, _) = (a, r, s)
+envSetScope s (a, r, _, i) = (a, r, s, i)
+
+envGetId :: Env -> Id.Id
+envGetId (_, _, _, i) = i
+
+envSetId :: Id.Id -> Env -> Env
+envSetId i (a, r, s, _) = (a, r, s, i)
 
 ----- BASIC MONAD -----
 
@@ -150,6 +156,36 @@ getScope = C $ \ env -> Left (env, envGetScope env)
 setScope :: Scope -> Compiler ()
 setScope s = C $ \ env -> Left (envSetScope s env, ())
 
+getId :: Compiler Id.Id
+getId = C $ \ env -> Left (env, envGetId env)
+
+setId :: Id.Id -> Compiler ()
+setId i = C $ \ env -> Left (envSetId i env, ())
+
+funcId :: String -> Compiler ()
+funcId s = setId $ Id.funcId s
+
+getFuncId :: Compiler String
+getFuncId = getId >>= return . Id.getFuncId
+
+getLoopId :: Compiler String
+getLoopId = getId >>= (maybe (failure "Not in loop") return) . Id.getLoopId
+
+addLoopId :: Compiler ()
+addLoopId = getId >>= setId . Id.addLoopId
+
+addIfId :: Compiler ()
+addIfId = getId >>= setId . Id.addIfId
+
+popId :: Compiler ()
+popId = getId >>= setId . Id.popId
+
+incId :: Compiler ()
+incId = getId >>= setId . Id.incId
+
+getIdString :: Compiler String
+getIdString = getId >>= return . Id.getIdString
+
 ----- COMPLIE -----
 
 compileFile :: File -> Compiler ()
@@ -169,15 +205,17 @@ compileSymb (Func (FuncType retType args) name body) = do
     addFun (Fun name retType args True numLocals)
     addLines [Label $ underscore ++ name, Push reg_ebp, MovReg reg_ebp reg_esp]
     when (numLocals > 0) $ addLine $ SubConst reg_esp $ toInteger numLocals
+    funcId name
     sc <- getScope
     loop addPar $ map (\ (t, n) -> Var n t Nothing True) $ reverse args
-    loop compileStmt body
+    loop (\ s -> compileStmt s >> incId) body
     setScope sc
     addLine $ Ret name
+    popId
 
 compileStmt (Block body) = do
     sc <- getScope
-    loop compileStmt body
+    loop (\ s -> compileStmt s >> incId) body
     setScope sc
 
 compileStmt (LocVar typ name _ e) = do
@@ -188,24 +226,28 @@ compileStmt (LocVar typ name _ e) = do
 
 compileStmt (If cond st1 st2) = do
     (reg, _) <- compileExpr cond
+    id <- addIfId >> getIdString
     addLine $ Cmp reg
     freeReg
-    addLine $ Je "else"
+    addLine $ Je $ id ++ ".else"
     compileStmt st1
-    addLine $ Jmp "end"
-    addLine $ Label "else"
+    addLine $ Jmp $ id ++ ".end"
+    addLine $ Label $ id ++ ".else"
     compileStmt st2
-    addLine $ Label "end"
+    addLine $ Label $ id ++ ".end"
+    popId
 
 compileStmt (While cond body) = do
-    addLine $ Label "start"
+    id <- addLoopId >> getIdString
+    addLine $ Label $ id ++ ".start"
     (reg, _) <- compileExpr cond
     addLine $ Cmp reg
     freeReg
-    addLine $ Je "end"
+    addLine $ Je $ id ++ ".end"
     compileStmt body
-    addLine $ Jmp "start"
-    addLine $ Label "end"
+    addLine $ Jmp $ id ++ ".start"
+    addLine $ Label $ id ++ ".end"
+    popId
 
 compileStmt Nop = return ()
 

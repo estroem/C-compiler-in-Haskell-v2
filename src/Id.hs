@@ -1,4 +1,4 @@
-module Id ( Id, funcId, getFuncId, getLoopId, addLoopId, addIfId, incId, getIdString ) where
+module Id ( Id, funcId, getFuncId, getLoopId, addLoopId, addIfId, popId, incId, getIdString ) where
 
 import Data.List
 
@@ -28,6 +28,9 @@ addLoopId id = ((fst id) ++ [LoopId $ snd id], 0)
 
 addIfId :: Id -> Id
 addIfId id = ((fst id) ++ [IfId $ snd id], 0)
+
+popId :: Id -> Id
+popId (l, n) = (reverse $ tail $ reverse l, n)
 
 incId :: Id -> Id
 incId id = (fst id, (snd id) + 1)

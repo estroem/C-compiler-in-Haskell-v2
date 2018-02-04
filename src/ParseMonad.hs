@@ -118,8 +118,7 @@ if' = do
     string "if"
     c <- parens expr
     s1 <- stmt
-    string "else"
-    s2 <- stmt
+    s2 <- (string "else" >> stmt) <|> return (Block [])
     return $ If c s1 s2
 
 while :: Parser Stmt
