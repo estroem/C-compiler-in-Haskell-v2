@@ -107,7 +107,7 @@ block :: Parser Stmt
 block = Block <$> (braces $ many stmt)
 
 stmt :: Parser Stmt
-stmt = block <|> if' <|> locVar <|> (Expr <$> expr <* semi)
+stmt = block <|> if' <|> while <|> locVar <|> (Expr <$> expr <* semi)
 
 locVar :: Parser Stmt
 locVar = (gloVar <* semi >>= \ (VarDecl t n _) -> return $ LocVar t n False Nothing)
@@ -121,6 +121,9 @@ if' = do
     string "else"
     s2 <- stmt
     return $ If c s1 s2
+
+while :: Parser Stmt
+while = (string "while") >> While <$> (parens expr) <*> stmt
 
 expr :: Parser Expr
 expr = binAppR ["="] disjuction
@@ -138,7 +141,10 @@ summation :: Parser Expr
 summation = binAppR ["+", "-"] term
 
 term :: Parser Expr
-term = binAppR ["*", "/"] (call <|> number <|> name <|> literal)
+term = binAppR ["*", "/"] unary
+
+unary :: Parser Expr
+unary = unApp ["$", "&", "!"] (call <|> number <|> name <|> literal <|> (parens expr))
 
 binAppR :: [String] -> Parser Expr -> Parser Expr
 binAppR s p = do
@@ -149,6 +155,13 @@ binAppR s p = do
         return $ App op [e1, e2]
      ) <|> return e1
 
+unApp :: [String] -> Parser Expr -> Parser Expr
+unApp s p = (do
+        op <- oneOf (map string s)
+        e <- p
+        return $ App op [e]
+    ) <|> p
+     
 semi :: Parser ()
 semi = char ';' >> return ()
 

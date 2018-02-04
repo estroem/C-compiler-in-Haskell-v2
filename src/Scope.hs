@@ -46,7 +46,7 @@ scopeAddPar :: Scope -> Var -> Scope
 scopeAddPar (Scope gs ss ps ls fs) v = (Scope gs ss (v:ps) ls fs)
 
 scopeAddLoc :: Scope -> Var -> Scope
-scopeAddLoc (Scope gs ss ps ls fs) v = (Scope gs ss ps (v:ls) fs)
+scopeAddLoc (Scope gs ss ps ls fs) v = (Scope gs ss ps (ls++[v]) fs)
 
 scopeAddFun :: Scope -> Fun -> Scope
 scopeAddFun (Scope gs ss ps ls fs) f = (Scope gs ss ps ls (f:fs))

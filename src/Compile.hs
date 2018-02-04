@@ -116,7 +116,8 @@ getVarType name = do
 
 getFunType :: String -> Compiler Type
 getFunType name = do
-    getFun name >>= return . funRetType
+    (Fun _ r a _ _) <- getFun name
+    return $ FuncType r a
 
 getFun :: String -> Compiler Fun
 getFun name = do
@@ -169,7 +170,7 @@ compileSymb (Func (FuncType retType args) name body) = do
     addLines [Label $ underscore ++ name, Push reg_ebp, MovReg reg_ebp reg_esp]
     when (numLocals > 0) $ addLine $ SubConst reg_esp $ toInteger numLocals
     sc <- getScope
-    loop addPar $ map (\ (t, n) -> Var n t Nothing True) args
+    loop addPar $ map (\ (t, n) -> Var n t Nothing True) $ reverse args
     loop compileStmt body
     setScope sc
     addLine $ Ret name
@@ -182,17 +183,28 @@ compileStmt (Block body) = do
 compileStmt (LocVar typ name _ e) = do
     addLoc $ Var name typ Nothing True
     case e of
-        Just ex -> compileExpr (App "=" [Name name, ex]) >> return ()
+        Just ex -> compileExpr (App "=" [Name name, ex]) >> freeReg >> return ()
         Nothing -> return ()
 
 compileStmt (If cond st1 st2) = do
     (reg, _) <- compileExpr cond
     addLine $ Cmp reg
+    freeReg
     addLine $ Je "else"
     compileStmt st1
     addLine $ Jmp "end"
     addLine $ Label "else"
     compileStmt st2
+    addLine $ Label "end"
+
+compileStmt (While cond body) = do
+    addLine $ Label "start"
+    (reg, _) <- compileExpr cond
+    addLine $ Cmp reg
+    freeReg
+    addLine $ Je "end"
+    compileStmt body
+    addLine $ Jmp "start"
     addLine $ Label "end"
 
 compileStmt Nop = return ()
@@ -215,22 +227,22 @@ compileExpr (Name name) = do
         i <- getVarOffset name
         addLine $ LoadLoc reg $ toInteger i
      ) <|> (do
-        getFunType name <|> getVarType name
-        addLine $ Load reg name
+        getFunType name >> (addLine $ Load reg $ underscore ++ name)
+        <|> (getVarType name >> (addLine $ Load reg name))
      )
-    typ <- getVarType name <|> (PtrType <$> getFunType name)
+    typ <- getVarType name <|> getFunType name
     return (reg, typ)
 
-compileExpr (App "+" [expr1, expr2]) = do
-    (reg1, type1) <- compileExpr expr1
-    (reg2, type2) <- compileExpr expr2
-    let retType = getType "+" type1 type2
-    failIf (not $ isJust retType) "Incompatible types"
-    fixPtrOffset reg1 type1
-    fixPtrOffset reg2 type2
-    addLine $ Add reg1 reg2
-    freeReg
-    return (reg1, fromJust retType)
+compileExpr (App "+" [expr1, expr2]) = handleSummation "+" expr1 expr2
+compileExpr (App "-" [expr1, expr2]) = handleSummation "-" expr1 expr2
+
+compileExpr (App "&" [Name name]) = do
+    reg <- getReg
+    typ <- (addLine <$> (AddrLoc reg) <$> toInteger <$> (getVarOffset name) >> getVarType name)
+        <|> (getVarType name <* (addLine $ Addr reg name))
+        <|> (getFunType name <* (addLine $ Addr reg $ underscore ++ name))
+        <|> failure "Can only get address of l-value"
+    return (reg, PtrType $ typ)
 
 compileExpr (App "=" [Name name, expr]) = do
     (reg, typ) <- compileExpr expr
@@ -261,32 +273,49 @@ compileExpr (App sym [expr1, expr2]) = do
     case sym of
         "*" -> addLine $ Mul reg1 reg2
         "/" -> addLine $ Div reg1 reg2
-        "==" -> addLines [Sub reg1 reg2, Setz reg1, AddConst reg1 1]
+        "==" -> addLines [Sub reg1 reg2, Setz reg1, AndConst reg1 1]
         "!=" -> addLine $ Sub reg1 reg2
     freeReg
     return (reg1, fromJust retType)
     
-compileExpr (Call (Name name) args) = do
-    retType <- getFunType name
+compileExpr c@(Call ex args) = callByName c <|> callByAddr c
+
+callByName (Call (Name name) args) = do
+    retType <- funRetType <$> getFun name
     reg <- getReg
-    if reg /= reg_eax
-        then addLine $ Push reg_eax
-        else return ()
+    when (reg /= reg_eax) $ addLine $ Push reg_eax
     handleCallArgs args
     addLine $ CallName (underscore ++ name) [] 0
-    addLine $ AddConst reg_esp $ toInteger $ length args * 4
-    if reg /= reg_eax
-        then do
-            addLine $ MovReg reg reg_eax
-            addLine $ Pop reg_eax
-        else return ()
+    when (length args > 0) $ addLine $ AddConst reg_esp $ toInteger $ length args * 4
+    when (reg /= reg_eax) $ addLines [MovReg reg reg_eax, Pop reg_eax]
     return (reg, retType)
 
-handleCallArgs :: [Expr] -> Compiler ()
-handleCallArgs = loop $ \ x -> do
-    (reg, _) <- compileExpr x
-    addLine $ Push reg
+callByAddr (Call ex args) = do
+    (reg, typ) <- compileExpr ex
+    case typ of
+        (PtrType (FuncType _ _)) -> return ()
+        _ -> failure $ (show typ) ++ "Not a pointer to a function"
+    when (reg /= reg_eax) $ addLine $ Push reg_eax
+    handleCallArgs args
+    addLine $ CallAddr reg [] 0
+    when (length args > 0) $ addLine $ AddConst reg_esp $ toInteger $ length args * 4
+    when (reg /= reg_eax) $ addLines [MovReg reg reg_eax, Pop reg_eax]
+    return (reg, typ)
+
+handleSummation :: String -> Expr -> Expr -> Compiler (Reg, Type)
+handleSummation s expr1 expr2 = do
+    (reg1, type1) <- compileExpr expr1
+    (reg2, type2) <- compileExpr expr2
+    let retType = getType s type1 type2
+    failIf (not $ isJust retType) "Incompatible types"
+    fixPtrOffset reg1 type1
+    fixPtrOffset reg2 type2
+    addLine $ (if s == "+" then Add else Sub) reg1 reg2
     freeReg
+    return (reg1, fromJust retType)
+
+handleCallArgs :: [Expr] -> Compiler ()
+handleCallArgs = loop $ \ x -> compileExpr x >>= addLine <$> Push <$> fst >> freeReg
     
 fixPtrOffset :: Reg -> Type -> Compiler ()
 fixPtrOffset reg1 typ =
