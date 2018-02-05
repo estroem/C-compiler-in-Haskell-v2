@@ -12,9 +12,9 @@ import Data.List
 import System.Environment
 
 import Tokenize
+import Parse
 import Compile
 import Asm
-import Parse
 
 --- COMPILE
 
@@ -29,7 +29,7 @@ main = do
     if (length args) == 2
         then do
             file <- readFile $ (args !! 0)
-            --writeFile (args !! 1) $ show $ parseMonad $ tokenize $ file
+            --writeFile (args !! 1) $ show $ parse $ tokenize $ file
             writeFile (args !! 1) $ intercalate "\n" $ run file
         else
             putStrLn $ intercalate "\n" $ run $ (head args)

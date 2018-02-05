@@ -105,7 +105,7 @@ block :: Parser Stmt
 block = Block <$> (braces $ many stmt)
 
 stmt :: Parser Stmt
-stmt = block <|> if' <|> while <|> locVar <|> (return' <* semi) <|> (Expr <$> expr <* semi)
+stmt = block <|> if' <|> while <|> for <|> locVar <|> (return' <* semi) <|> (Expr <$> expr <* semi)
 
 locVar :: Parser Stmt
 locVar = (gloVar <* semi >>= \ (VarDecl t n _) -> return $ LocVar t n False Nothing)
@@ -121,6 +121,17 @@ if' = do
 
 while :: Parser Stmt
 while = (string "while") >> While <$> (parens expr) <*> stmt
+
+for :: Parser Stmt
+for = do--(string "for") >> parens (For <$> (stmt <* semi) <*> (expr <* semi) <*> expr) <*> stmt
+    string "for"
+    char '('
+    pre <- (stmt <|> (return Nop <* semi))
+    cond <- (expr <|> return (Number 1)) <* semi
+    post <- (expr <|> return (Number 0))
+    char ')'
+    body <- stmt
+    return $ For pre cond post body
 
 return' :: Parser Stmt
 return' = string "return" >> Return <$> (Just <$> expr) <|> return Nothing

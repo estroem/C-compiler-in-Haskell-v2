@@ -249,6 +249,22 @@ compileStmt (While cond body) = do
     addLine $ Label $ id ++ ".end"
     popId
 
+compileStmt (For pre cond post body) = do
+    id <- addLoopId >> getIdString
+    compileStmt pre
+    addLine $ Jmp $ id ++ ".cond"
+    addLine $ Label $ id ++ ".start"
+    compileExpr post
+    addLine $ Label $ id ++ ".cond"
+    (reg, _) <- compileExpr cond
+    addLine $ Cmp reg
+    freeReg
+    addLine $ Je $ id ++ ".end"
+    compileStmt body
+    addLine $ Jmp $ id ++ ".start"
+    addLine $ Label $ id ++ ".end"
+    popId
+    
 compileStmt Nop = return ()
 
 compileStmt (Return Nothing) = getFuncId >>= addLine . Ret
