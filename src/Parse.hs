@@ -116,7 +116,7 @@ if' = do
     string "if"
     c <- parens expr
     s1 <- stmt
-    s2 <- (string "else" >> stmt) <|> return (Block [])
+    s2 <- (string "else" >> stmt) <|> return Nop
     return $ If c s1 s2
 
 while :: Parser Stmt
@@ -140,22 +140,30 @@ expr :: Parser Expr
 expr = binAppR ["="] disjuction
 
 disjuction :: Parser Expr
-disjuction = binAppR ["||"] conjunction
+disjuction = binAppL ["||"] conjunction
 
 conjunction :: Parser Expr
-conjunction = binAppR ["&&"] relation
+conjunction = binAppL ["&&"] relation
 
 relation :: Parser Expr
-relation = binAppR ["==", "!=", "<", ">", "<=", ">="] summation
+relation = binAppL ["==", "!=", "<", ">", "<=", ">="] summation
 
 summation :: Parser Expr
-summation = binAppR ["+", "-"] term
+summation = binAppL ["+", "-"] term
 
 term :: Parser Expr
-term = binAppR ["*", "/"] unary
+term = binAppL ["*", "/"] unary
 
 unary :: Parser Expr
-unary = unApp ["$", "&", "!"] (call <|> number <|> name <|> literal <|> (parens expr))
+unary = unAppL ["$", "&", "!", "*", "++", "--"] $ unAppR ["++", "--"] $ call <|> number <|> name <|> literal <|> (parens expr)
+
+binAppL :: [String] -> Parser Expr -> Parser Expr
+binAppL s p = p >>= (binAppL' s p) where
+    binAppL' s p prev = (do
+        op <- oneOf (map string s)
+        e <- p
+        binAppL' s p $ App op [prev, e]
+     ) <|> return prev
 
 binAppR :: [String] -> Parser Expr -> Parser Expr
 binAppR s p = do
@@ -166,13 +174,28 @@ binAppR s p = do
         return $ App op [e1, e2]
      ) <|> return e1
 
-unApp :: [String] -> Parser Expr -> Parser Expr
-unApp s p = (do
-        op <- oneOf (map string s)
+unAppL :: [String] -> Parser Expr -> Parser Expr
+unAppL s p = (do
+        op <- preFix <$> oneOf (map string s)
         e <- p
         return $ App op [e]
     ) <|> p
-     
+    where
+        preFix "*" = "$"
+        preFix x = x
+
+unAppR :: [String] -> Parser Expr -> Parser Expr
+unAppR s p = do
+    e <- p
+    (do
+        op <- postFix <$> oneOf (map string s)
+        return $ App op [e]
+     ) <|> return e
+    where
+        postFix "++" = "+++"
+        postFix "--" = "---"
+        postFix x = x
+
 semi :: Parser ()
 semi = char ';' >> return ()
 

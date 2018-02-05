@@ -307,11 +307,11 @@ compileExpr (App "-" [expr1, expr2]) = handleSummation "-" expr1 expr2
 
 compileExpr (App "&" [Name name]) = do
     reg <- getReg
-    typ <- (addLine <$> (AddrLoc reg) <$> toInteger <$> (getVarOffset name) >> getVarType name)
+    typ <- ((AddrLoc reg) <$> toInteger <$> (getVarOffset name) >>= addLine >> getVarType name)
         <|> (getVarType name <* (addLine $ Addr reg name))
         <|> (getFunType name <* (addLine $ Addr reg $ underscore ++ name))
         <|> failure "Can only get address of l-value"
-    return (reg, PtrType $ typ)
+    return (reg, PtrType typ)
 
 compileExpr (App "=" [Name name, expr]) = do
     (reg, typ) <- compileExpr expr
