@@ -168,8 +168,23 @@ disjuction = binAppL ["||"] conjunction
 conjunction :: Parser Expr
 conjunction = binAppL ["&&"] relation
 
+bitOr :: Parser Expr
+bitOr = binAppL ["|"] bitXor
+
+bitXor :: Parser Expr
+bitXor = binAppL ["^"] bitAnd
+
+bitAnd :: Parser Expr
+bitAnd = binAppL ["&"] equivalence
+
+equivalence :: Parser Expr
+equivalence = binAppL ["==", "!="] relation
+
 relation :: Parser Expr
-relation = binAppL ["==", "!=", "<", ">", "<=", ">="] summation
+relation = binAppL ["<", ">", "<=", ">="] shift
+
+shift :: Parser Expr
+shift = binAppL ["<<", ">>"] summation
 
 summation :: Parser Expr
 summation = binAppL ["+", "-"] term
@@ -200,7 +215,7 @@ binAppR s p = do
 unAppL :: [String] -> Parser Expr -> Parser Expr
 unAppL s p = (do
         op <- preFix <$> oneOf (map string s)
-        e <- p
+        e <- unAppL s p
         return $ App op [e]
     ) <|> p
     where

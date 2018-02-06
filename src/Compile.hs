@@ -362,6 +362,11 @@ compileExpr (App sym [expr1, expr2]) = do
         "<" -> addLines [Sub reg1 reg2, Setl reg1, AndConst reg1 1]
         ">=" -> addLines [Sub reg1 reg2, Setge reg1, AndConst reg1 1]
         "<=" -> addLines [Sub reg1 reg2, Setle reg1, AndConst reg1 1]
+        "|" -> addLine $ Or reg1 reg2
+        "^" -> addLine $ Xor reg1 reg2
+        "&" -> addLine $ And reg1 reg2
+        "<<" -> addLine $ Shl reg1 reg2
+        ">>" -> addLine $ Shr reg1 reg2
     freeReg
     return (reg1, fromJust retType)
 

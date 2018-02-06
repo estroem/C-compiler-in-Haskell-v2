@@ -7,7 +7,7 @@ data Op = Add | Sub | Mul | Div | Assign | Deref | AddrOf | Equal | NotEqual
     | PreInc | PreDec | PostInc | PostDec
     deriving (Show)
 
-operators = ["+", "-", "*", "/", "&", "=", "==", "!=", "<", ">", "<=", ">=", "!", "++", "--"]
+operators = ["+", "-", "*", "/", "&", "=", "==", "!=", "<", ">", "<=", ">=", "!", "++", "--", "^", "<<", ">>"]
 
 isOperator :: String -> Bool
 isOperator sym = elem sym operators

@@ -83,6 +83,11 @@ toAsmLine (Setg reg) _ _             = (["setg " ++ getRegLower reg], [])
 toAsmLine (Setle reg) _ _            = (["setle " ++ getRegLower reg], [])
 toAsmLine (Setge reg) _ _            = (["setge " ++ getRegLower reg], [])
 toAsmLine (AndConst reg i) _ _       = (["and " ++ getReg reg ++ ", " ++ show i], [])
+toAsmLine (Or reg1 reg2) _ _         = (["or " ++ getReg reg1 ++ ", " ++ getReg reg2], [])
+toAsmLine (Xor reg1 reg2) _ _         = (["xor " ++ getReg reg1 ++ ", " ++ getReg reg2], [])
+toAsmLine (And reg1 reg2) _ _         = (["and " ++ getReg reg1 ++ ", " ++ getReg reg2], [])
+toAsmLine (Shl reg1 reg2) _ _         = (["shl " ++ getReg reg1 ++ ", " ++ getReg reg2], [])
+toAsmLine (Shr reg1 reg2) _ _         = (["shr " ++ getReg reg1 ++ ", " ++ getReg reg2], [])
 
 retNumLocals :: Scope -> PseudoLine -> PseudoLine
 retNumLocals s (Ret n) = Ret $ show $ (funcGetNumLoc s n)
