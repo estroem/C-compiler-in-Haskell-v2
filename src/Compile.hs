@@ -375,6 +375,22 @@ compileExpr (ArrayDeref ex i) = do
     freeReg
     return (reg, newTyp)
 
+compileExpr (Ternary cond expr1 expr2) = do
+    (reg, _) <- compileExpr cond
+    id <- addIfId >> getIdString
+    addLine $ Cmp reg
+    freeReg
+    addLine $ Je $ id ++ ".else"
+    (reg2, typ2) <- compileExpr expr1
+    addLine $ Jmp $ id ++ ".end"
+    addLine $ Label $ id ++ ".else"
+    (reg3, typ3) <- compileExpr expr2
+    addLine $ MovReg reg2 reg3
+    addLine $ Label $ id ++ ".end"
+    freeReg
+    popId
+    return (reg2, typ2)
+
 compileExpr c@(Call ex args) = callByName c <|> callByAddr c
 
 callByName (Call (Name name) args) = do

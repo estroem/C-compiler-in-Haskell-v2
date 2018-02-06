@@ -149,7 +149,18 @@ return' :: Parser Stmt
 return' = string "return" >> (Return <$> (Just <$> expr) <|> return Nothing) <* semi
 
 expr :: Parser Expr
-expr = binAppR ["="] disjuction
+expr = binAppR ["="] ternary
+
+ternary :: Parser Expr
+ternary = do
+    cond <- disjuction
+    (do
+        char '?'
+        ex1 <- disjuction
+        char ':'
+        ex2 <- ternary
+        return $ Ternary cond ex1 ex2
+     ) <|> return cond
 
 disjuction :: Parser Expr
 disjuction = binAppL ["||"] conjunction
