@@ -338,6 +338,19 @@ compileExpr (App "=" [App "$" [addrExpr], valueExpr]) = do
 
 compileExpr (App "=" [ArrayDeref ex1 ex2, ex3]) = compileExpr $ App "=" [App "$" [App "+" [ex1, ex2]], ex3]
 
+compileExpr (App "++" [expr]) = compileExpr $ App "=" [expr, App "+" [expr, Number 1]]
+compileExpr (App "--" [expr]) = compileExpr $ App "=" [expr, App "-" [expr, Number 1]]
+
+compileExpr (App "+++" [expr]) = do
+    (reg, typ) <- compileExpr $ App "=" [expr, App "+" [expr, Number 1]]
+    addLine $ Dec reg
+    return (reg, typ)
+
+compileExpr (App "---" [expr]) = do
+    (reg, typ) <- compileExpr $ App "=" [expr, App "-" [expr, Number 1]]
+    addLine $ Inc reg
+    return (reg, typ)
+
 compileExpr (App sym [expr]) = do
     (reg, typ) <- compileExpr expr
     let retType = getType sym typ undefined

@@ -88,6 +88,8 @@ toAsmLine (Xor reg1 reg2) _ _        = (["xor " ++ getReg reg1 ++ ", " ++ getReg
 toAsmLine (And reg1 reg2) _ _        = (["and " ++ getReg reg1 ++ ", " ++ getReg reg2], [])
 toAsmLine (Shl reg) _ _              = (["shl " ++ getReg reg ++ ", cl"], [])
 toAsmLine (Shr reg) _ _              = (["shr " ++ getReg reg ++ ", cl"], [])
+toAsmLine (Inc reg) _ _              = (["inc " ++ getReg reg], [])
+toAsmLine (Dec reg) _ _              = (["dec " ++ getReg reg], [])
 
 retNumLocals :: Scope -> PseudoLine -> PseudoLine
 retNumLocals s (Ret n) = Ret $ show $ (funcGetNumLoc s n)
