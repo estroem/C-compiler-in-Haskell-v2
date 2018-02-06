@@ -155,7 +155,7 @@ term :: Parser Expr
 term = binAppL ["*", "/"] unary
 
 unary :: Parser Expr
-unary = unAppL ["$", "&", "!", "*", "++", "--"] $ unAppR ["++", "--"] $ call <|> number <|> name <|> literal <|> (parens expr)
+unary = unAppL ["&", "!", "*", "++", "--"] $ unAppR ["++", "--"] $ call <|> arrayDeref <|> number <|> name <|> literal <|> (parens expr)
 
 binAppL :: [String] -> Parser Expr -> Parser Expr
 binAppL s p = p >>= (binAppL' s p) where
@@ -217,6 +217,9 @@ braces p = do
     char '}'
     return r
 
+brackets :: Parser a -> Parser a
+brackets p = (char '[') >> p <* (char ']')
+
 literal :: Parser Expr
 literal = do
     s <- cond (\ t -> head t == '"') single
@@ -228,6 +231,9 @@ call = do
     a <- parens $ sep (char ',') expr
     return $ Call e a
 
+arrayDeref :: Parser Expr
+arrayDeref = ArrayDeref <$> (name <|> parens expr) <*> (brackets expr)
+    
 name :: Parser Expr
 name = Name <$> identifier
 
@@ -253,11 +259,7 @@ innerDecl = do
     return (addType t (createType x a), n)
 
 funcType :: Parser Type
-funcType = do
-    char '('
-    a <- sep (char ',') decl
-    char ')'
-    return $ FuncType EmptyType a
+funcType = (FuncType EmptyType) <$> parens (sep (char ',') decl)
 
 arrType :: Parser Type
 arrType = (char '[') >> ((ArrayType EmptyType) <$> fromInteger <$> int) <* (char ']')

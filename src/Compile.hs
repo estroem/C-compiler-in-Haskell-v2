@@ -325,6 +325,17 @@ compileExpr (App "=" [Name name, expr]) = do
      )
     return (reg, varTyp)
 
+compileExpr (App "=" [App "$" [addrExpr], valueExpr]) = do
+    (addrReg, ptrTyp) <- compileExpr addrExpr
+    (valueReg, valueTyp) <- compileExpr valueExpr
+    addrTyp <- maybe (failure "Cannot deref non-pointer") return $ getPtrType ptrTyp
+    failIf (not $ canCast addrTyp valueTyp) $ "Incompatible types: " ++ show addrTyp ++ " and " ++ show valueTyp
+    addLine $ SaveToPtr addrReg valueReg $ toInteger $ getTypeSize addrTyp
+    freeReg
+    return (addrReg, addrTyp)
+
+compileExpr (App "=" [ArrayDeref ex1 ex2, ex3]) = compileExpr $ App "=" [App "$" [App "+" [ex1, ex2]], ex3]
+
 compileExpr (App sym [expr]) = do
     (reg, typ) <- compileExpr expr
     let retType = getType sym typ undefined
@@ -350,6 +361,17 @@ compileExpr (App sym [expr1, expr2]) = do
         "<=" -> addLines [Sub reg1 reg2, Setle reg1, AndConst reg1 1]
     freeReg
     return (reg1, fromJust retType)
+
+compileExpr (ArrayDeref ex i) = do
+    (reg, typ) <- compileExpr ex
+    newTyp <- maybe (failure "Cannot deref non-pointer") return $ getPtrType typ
+    (iReg, iTyp) <- compileExpr i
+    failIf (not $ typeIsInt iTyp) $ "Array index must be integer"
+    fixPtrOffset iReg typ
+    addLine $ Add reg iReg
+    addLine $ DeRef reg
+    freeReg
+    return (reg, newTyp)
     
 compileExpr c@(Call ex args) = callByName c <|> callByAddr c
 
@@ -381,8 +403,8 @@ handleSummation s expr1 expr2 = do
     (reg2, type2) <- compileExpr expr2
     let retType = getType s type1 type2
     failIf (not $ isJust retType) "Incompatible types"
-    fixPtrOffset reg1 type1
-    fixPtrOffset reg2 type2
+    fixPtrOffset reg1 type2
+    fixPtrOffset reg2 type1
     addLine $ (if s == "+" then Add else Sub) reg1 reg2
     freeReg
     return (reg1, fromJust retType)

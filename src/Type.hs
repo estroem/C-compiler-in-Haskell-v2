@@ -1,4 +1,4 @@
-module Type ( Type (..), getIntType, canCast, getType, getTypeSize, isPrimitive, getPtrType, addType ) where
+module Type ( Type (..), getIntType, canCast, getType, getTypeSize, isPrimitive, getPtrType, addType, typeIsInt ) where
 
 import Data.Maybe
 import Data.List
@@ -127,3 +127,11 @@ addType EmptyType b = b
 addType (PtrType a) b = (PtrType (addType a b))
 addType (FuncType a c) b = (FuncType (addType a b) c)
 addType (ArrayType a i) b = (ArrayType (addType a b) i)
+
+typeIsInt :: Type -> Bool
+typeIsInt (PrimType t) = case t of
+    "int" -> True
+    "short" -> True
+    "char" -> True
+    _ -> False
+typeIsInt _ = False
