@@ -17,7 +17,6 @@ compile :: File -> (Pseudo, Scope)
 compile = runCompiler . compileFile
 
 underscore = "_"
-reg_eax = 0
 
 ----- ENVIRONMENT -----
 
@@ -365,8 +364,8 @@ compileExpr (App sym [expr1, expr2]) = do
         "|" -> addLine $ Or reg1 reg2
         "^" -> addLine $ Xor reg1 reg2
         "&" -> addLine $ And reg1 reg2
-        "<<" -> addLine $ Shl reg1 reg2
-        ">>" -> addLine $ Shr reg1 reg2
+        "<<" -> addLines [Push reg_ecx, MovReg reg_ecx reg2, Shl reg1, Pop reg_ecx]
+        ">>" -> addLines [Push reg_ecx, MovReg reg_ecx reg2, Shr reg1, Pop reg_ecx]
     freeReg
     return (reg1, fromJust retType)
 

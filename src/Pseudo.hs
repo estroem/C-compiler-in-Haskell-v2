@@ -11,7 +11,7 @@ data PseudoLine = Add Reg Reg | Sub Reg Reg | Mul Reg Reg | Div Reg Reg | Mov Re
              | MulConst Reg Integer | DivConst Reg Integer | LoadLit Reg String | MovReg Reg Reg
              | Addr Reg String | AddrLoc Reg Integer | Test Reg | Setz Reg | Setl Reg | Setg Reg
              | Setle Reg | Setge Reg | AndConst Reg Integer | And Reg Reg | Xor Reg Reg | Or Reg Reg
-             | Shl Reg Reg | Shr Reg Reg
+             | Shl Reg | Shr Reg
     deriving (Show)
 
 type Pseudo = [PseudoLine]
