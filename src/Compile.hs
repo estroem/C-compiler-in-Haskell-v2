@@ -266,7 +266,10 @@ compileStmt (For pre cond post body) = do
     popId
     
 compileStmt Nop = return ()
-
+compileStmt Break = getLoopId >>= addLine . Jmp . (++".end")
+compileStmt Continue = getLoopId >>= addLine . Jmp . (++".start")
+compileStmt (Goto str) = addLine $ Jmp str
+compileStmt (GotoLabel str) = addLine $ Label str
 compileStmt (Return Nothing) = getFuncId >>= addLine . Ret
 
 compileStmt (Return (Just e)) = do

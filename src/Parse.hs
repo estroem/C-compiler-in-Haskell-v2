@@ -105,7 +105,7 @@ block :: Parser Stmt
 block = Block <$> (braces $ many stmt)
 
 stmt :: Parser Stmt
-stmt = block <|> if' <|> while <|> for <|> locVar <|> (return' <* semi) <|> (Expr <$> expr <* semi)
+stmt = block <|> if' <|> while <|> for <|> locVar <|> break' <|> continue <|> goto <|> label <|> return' <|> (Expr <$> expr <* semi)
 
 locVar :: Parser Stmt
 locVar = (gloVar <* semi >>= \ (VarDecl t n _) -> return $ LocVar t n False Nothing)
@@ -133,8 +133,20 @@ for = do--(string "for") >> parens (For <$> (stmt <* semi) <*> (expr <* semi) <*
     body <- stmt
     return $ For pre cond post body
 
+break' :: Parser Stmt
+break' = string "break" >> semi >> return Break
+
+continue :: Parser Stmt
+continue = string "continue" >> semi >> return Continue
+
+goto :: Parser Stmt
+goto = string "goto" >> Goto <$> identifier <* semi
+
+label :: Parser Stmt
+label = GotoLabel <$> identifier <* char ':'
+
 return' :: Parser Stmt
-return' = string "return" >> Return <$> (Just <$> expr) <|> return Nothing
+return' = string "return" >> (Return <$> (Just <$> expr) <|> return Nothing) <* semi
 
 expr :: Parser Expr
 expr = binAppR ["="] disjuction
