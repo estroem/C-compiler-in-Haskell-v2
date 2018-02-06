@@ -2,7 +2,7 @@ module Scope ( Scope (..), Var (..), Fun (..), Value (..),
                emptyScope, scopeAddGlo, scopeAddStc, scopeAddPar,
                scopeAddLoc, scopeAddFun, getOffset, scopeHasVar,
                scopeHasFun, scopeGetVar, scopeGetFun,
-               joinScopes, hideLocals, getTotalSize ) where
+               getTotalSize ) where
 
 import Data.List
 import Data.Maybe
@@ -81,15 +81,6 @@ scopeGetVar (Scope gs ss ps ls fs) name = find (\ v -> (varName v) == name) (gs 
 
 scopeGetFun :: Scope -> String -> Maybe Fun
 scopeGetFun (Scope gs ss ps ls fs) name = find (\ f -> (funName f) == name) fs
-
-joinScopes :: [Scope] -> Scope
-joinScopes list = joinScopesLoop list emptyScope where
-    joinScopesLoop ((Scope gs ss ps ls fs):xs) (Scope rgs rss rps rls rfs) =
-        joinScopesLoop xs (Scope (rgs ++ gs) (rss ++ ss) (rps ++ ps) (rls ++ ls) (rfs ++ fs))
-    joinScopesLoop [] res = res
-
-hideLocals :: Scope -> Scope
-hideLocals (Scope gs ss ps ls fs) = Scope gs ss ps (map (\ (Var n t v _) -> Var n t v False) ls) fs
 
 getTotalSize :: [Var] -> Int
 getTotalSize vs = foldl (\ t v -> t + (getTypeSize $ varType v)) 0 vs

@@ -44,18 +44,10 @@ getState = P $ \ inp -> Just (inp, inp)
 setState :: [String] -> Parser ()
 setState s = P $ \ inp -> Just (s, ())
 
---(<*) :: Parser a -> Parser b -> Parser a
---(<*) a b = a >>= \ r -> b >> return r
-
 (<|>) :: Parser a -> Parser a -> Parser a
 (<|>) (P a) (P b) = P $ \ inp -> case a inp of
     Just r -> Just r
     Nothing -> b inp
-
-stop :: Parser a -> Parser ()
-stop (P p) = P $ \ inp -> case p inp of
-        Just _ -> Nothing
-        Nothing -> Just (inp, ())
 
 many :: Parser a -> Parser [a]
 many p = many1 p <|> return []
@@ -304,13 +296,6 @@ createType 0 [] = EmptyType
 createType p [] = PtrType $ createType (p-1) []
 createType p ((ArrayType _ n):xs) = ArrayType (createType p xs) n
 createType p ((FuncType _ a):xs) = FuncType (createType p xs) a
-
-peek :: Parser a -> Parser a
-peek p = do
-    st <- getState
-    r <- p
-    setState st
-    return r
 
 single :: Parser String
 single = P $ \ inp ->
