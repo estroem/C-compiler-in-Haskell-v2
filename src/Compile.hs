@@ -368,11 +368,10 @@ compileExpr (ArrayDeref ex i) = do
     (iReg, iTyp) <- compileExpr i
     failIf (not $ typeIsInt iTyp) $ "Array index must be integer"
     fixPtrOffset iReg typ
-    addLine $ Add reg iReg
-    addLine $ DeRef reg
+    addLines [Add reg iReg, DeRef reg]
     freeReg
     return (reg, newTyp)
-    
+
 compileExpr c@(Call ex args) = callByName c <|> callByAddr c
 
 callByName (Call (Name name) args) = do

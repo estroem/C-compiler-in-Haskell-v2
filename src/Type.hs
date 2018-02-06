@@ -3,13 +3,14 @@ module Type ( Type (..), getIntType, canCast, getType, getTypeSize, isPrimitive,
 import Data.Maybe
 import Data.List
 
-data Type = PrimType String | PtrType Type | FuncType Type [(Type, String)] | ArrayType Type Int | EmptyType
+data Type = PrimType String | PtrType Type | FuncType Type [(Type, String)] | ArrayType Type Int | VoidType | EmptyType
 
 instance Eq Type where
     (PtrType a) == (PtrType b) = a == b
     (PrimType a) == (PrimType b) = a == b
     (FuncType a b) == (FuncType c d) = a == c && (fst $ unzip b) == (fst $ unzip d)
     (ArrayType a i) == (ArrayType b j) = a == b && i == j
+    VoidType == VoidType = True
     EmptyType == EmptyType = True
     _ == _ = False
 
@@ -103,6 +104,7 @@ showType (FuncType ret args) str =
                    (intercalate ", " $
                         map ((flip showType) "") $ fst $ unzip args) ++ ")"
 showType (ArrayType t i) str = showType t $ str ++ "[" ++ show i ++ "]"
+showType VoidType str = "void"
 showType EmptyType _ = "EmptyType"
 
 getTypeSize :: Type -> Int
@@ -122,6 +124,7 @@ getPtrType (ArrayType t _) = Just t
 getPtrType _ = Nothing
 
 addType :: Type -> Type -> Type
+addType VoidType _ = error "Cannot add to void"
 addType (PrimType _) _ = error "Cannot add to primitive type"
 addType EmptyType b = b
 addType (PtrType a) b = (PtrType (addType a b))

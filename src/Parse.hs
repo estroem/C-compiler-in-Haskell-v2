@@ -245,7 +245,7 @@ identifier = cond (all isAlphaNum) single
 
 decl :: Parser (Type, String)
 decl = do
-    p <- PrimType <$> cond isPrimitive single
+    p <- (PrimType <$> cond isPrimitive single) <|> (string "void" >> return VoidType)
     (t, n) <- innerDecl
     return (addType t p, n)
 
