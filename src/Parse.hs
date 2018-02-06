@@ -32,6 +32,9 @@ instance Monad Parser where
         Just (inp', x) -> let (P b) = (f x) in b inp'
         Nothing -> Nothing
 
+runP :: Parser a -> [String] -> Maybe ([String], a)
+runP (P p) inp = p inp
+
 failure :: Parser a
 failure = P $ \ _ -> Nothing
 
@@ -166,7 +169,7 @@ disjuction :: Parser Expr
 disjuction = binAppL ["||"] conjunction
 
 conjunction :: Parser Expr
-conjunction = binAppL ["&&"] relation
+conjunction = binAppL ["&&"] bitOr
 
 bitOr :: Parser Expr
 bitOr = binAppL ["|"] bitXor
@@ -190,10 +193,13 @@ summation :: Parser Expr
 summation = binAppL ["+", "-"] term
 
 term :: Parser Expr
-term = binAppL ["*", "/"] unary
+term = binAppL ["*", "/"] unaryL
 
-unary :: Parser Expr
-unary = unAppL ["&", "!", "*", "++", "--"] $ unAppR ["++", "--"] $ call <|> arrayDeref <|> number <|> name <|> literal <|> (parens expr)
+unaryL :: Parser Expr
+unaryL = unAppL ["&", "!", "*", "++", "--"] unaryR
+
+unaryR :: Parser Expr
+unaryR = unAppR ["++", "--"] $ number <|> name <|> literal <|> (parens expr)
 
 binAppL :: [String] -> Parser Expr -> Parser Expr
 binAppL s p = p >>= (binAppL' s p) where
@@ -223,16 +229,16 @@ unAppL s p = (do
         preFix x = x
 
 unAppR :: [String] -> Parser Expr -> Parser Expr
-unAppR s p = do
-    e <- p
-    (do
+unAppR s p = p >>= (unAppR' s p) where
+    unAppR' s p prev = (do
         op <- postFix <$> oneOf (map string s)
-        return $ App op [e]
-     ) <|> return e
-    where
-        postFix "++" = "+++"
-        postFix "--" = "---"
-        postFix x = x
+        unAppR' s p $ App op [prev]
+     ) <|> call prev <|> arrayDeref prev <|> return prev
+    call e = Call e <$> parens (sep (char ',') expr) >>= unAppR' s p
+    arrayDeref e = ArrayDeref e <$> (brackets expr) >>= unAppR' s p
+    postFix "++" = "+++"
+    postFix "--" = "---"
+    postFix x = x
 
 semi :: Parser ()
 semi = char ';' >> return ()
@@ -262,15 +268,6 @@ literal :: Parser Expr
 literal = do
     s <- cond (\ t -> head t == '"') single
     return $ Literal $ tail s
-
-call :: Parser Expr
-call = do
-    e <- name <|> parens expr
-    a <- parens $ sep (char ',') expr
-    return $ Call e a
-
-arrayDeref :: Parser Expr
-arrayDeref = ArrayDeref <$> (name <|> parens expr) <*> (brackets expr)
     
 name :: Parser Expr
 name = Name <$> identifier

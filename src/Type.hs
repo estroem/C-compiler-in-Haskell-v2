@@ -55,9 +55,10 @@ getType sym l r = case sym of
     ">" -> Just $ PrimType "int"
     "<=" -> Just $ PrimType "int"
     ">=" -> Just $ PrimType "int"
-    "^" -> Just l
-    "<<" -> Just l
-    ">>" -> Just l
+    "|" -> if typeIsInt l && typeIsInt r then getAddType l r else Nothing
+    "^" -> if typeIsInt l && typeIsInt r then getAddType l r else Nothing
+    "<<" -> if typeIsInt l && typeIsInt r then Just l else Nothing
+    ">>" -> if typeIsInt l && typeIsInt r then Just l else Nothing
 
 getMulType :: Type -> Type -> Maybe Type
 getMulType (PtrType _) _ = Nothing
