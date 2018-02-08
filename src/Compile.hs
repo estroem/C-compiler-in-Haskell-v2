@@ -275,7 +275,7 @@ compileStmt (Return (Just e)) = do
     (reg, typ) <- compileExpr e
     id <- getFuncId
     retType <- funRetType <$> getFun id
-    failIf (not $ canCast retType typ) "Incompatible types"
+    tryCast retType typ
     when (reg /= reg_eax) $ addLine $ MovReg reg_eax reg
     addLine $ Ret id
     freeReg
@@ -318,7 +318,7 @@ compileExpr (App "&" [Name name]) = do
 compileExpr (App "=" [Name name, expr]) = do
     (reg, typ) <- compileExpr expr
     varTyp <- getVarType name
-    failIf (not $ canCast varTyp typ) $ "Incompatible types: " ++ show typ ++ " and " ++ show varTyp
+    tryCast varTyp typ
     (do
         i <- toInteger <$> getVarOffset name
         addLine $ SaveLoc i reg
@@ -331,7 +331,7 @@ compileExpr (App "=" [App "$" [addrExpr], valueExpr]) = do
     (addrReg, ptrTyp) <- compileExpr addrExpr
     (valueReg, valueTyp) <- compileExpr valueExpr
     addrTyp <- maybe (failure "Cannot deref non-pointer") return $ getPtrType ptrTyp
-    failIf (not $ canCast addrTyp valueTyp) $ "Incompatible types: " ++ show addrTyp ++ " and " ++ show valueTyp
+    tryCast addrTyp valueTyp
     addLine $ SaveToPtr addrReg valueReg $ toInteger $ getTypeSize addrTyp
     freeReg
     return (addrReg, addrTyp)
@@ -456,6 +456,9 @@ fixPtrOffset reg1 typ =
             addLine $ Mul reg1 reg2
         )
         $ getPtrType typ
+
+tryCast :: Type -> Type -> Compiler ()
+tryCast l r = failIf (not $ canCast l r)  $ "Cannot autocast from " ++ show l ++ " to " ++ show r
 
 countLocals :: [Stmt] -> Int
 countLocals [] = 0
