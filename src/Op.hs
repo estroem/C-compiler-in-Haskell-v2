@@ -1,4 +1,4 @@
-module Op ( Op (..), isOperator ) where
+module Op ( Op (..), isOperator, preFix, postFix ) where
 
 import Data.List
 
@@ -11,3 +11,10 @@ operators = ["+", "-", "*", "/", "&", "=", "==", "!=", "<", ">", "<=", ">=", "!"
 
 isOperator :: String -> Bool
 isOperator sym = elem sym operators
+
+preFix "*" = "$"
+preFix a = a
+
+postFix "++" = "+++"
+postFix "--" = "---"
+postFix a = a

@@ -209,7 +209,7 @@ compileSymb (Func (FuncType retType args) name body) = do
     loop addPar $ map (\ (t, n) -> Var n t Nothing True) $ reverse args
     loop (\ s -> compileStmt s >> incId) body
     setScope sc
-    addLine $ Ret name
+    when (not $ endsOnRet body) $ addLine $ Ret name
     popId
 
 compileStmt (Block body) = do
@@ -467,3 +467,9 @@ countLocals (_:xs) = countLocals xs
 evaluate :: Expr -> Value
 evaluate (Number x) = Integer $ fromInteger x
 evaluate (Literal s) = String s
+
+endsOnRet :: [Stmt] -> Bool
+endsOnRet [] = False
+endsOnRet ([Return _]) = True
+endsOnRet ([Block b]) = endsOnRet b
+endsOnRet (x:xs) = endsOnRet xs

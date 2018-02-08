@@ -6,6 +6,7 @@ import Data.List
 import Tokenize
 import Ast
 import Type
+import Op
 
 data Parser a = P ([String] -> Maybe ([String], a))
 
@@ -118,7 +119,7 @@ while :: Parser Stmt
 while = (string "while") >> While <$> (parens expr) <*> stmt
 
 for :: Parser Stmt
-for = do--(string "for") >> parens (For <$> (stmt <* semi) <*> (expr <* semi) <*> expr) <*> stmt
+for = do
     string "for"
     char '('
     pre <- (stmt <|> (return Nop <* semi))
@@ -216,9 +217,6 @@ unAppL s p = (do
         e <- unAppL s p
         return $ App op [e]
     ) <|> p
-    where
-        preFix "*" = "$"
-        preFix x = x
 
 unAppR :: [String] -> Parser Expr -> Parser Expr
 unAppR s p = p >>= (unAppR' s p) where
@@ -228,9 +226,6 @@ unAppR s p = p >>= (unAppR' s p) where
      ) <|> call prev <|> arrayDeref prev <|> return prev
     call e = Call e <$> parens (sep (char ',') expr) >>= unAppR' s p
     arrayDeref e = ArrayDeref e <$> (brackets expr) >>= unAppR' s p
-    postFix "++" = "+++"
-    postFix "--" = "---"
-    postFix x = x
 
 semi :: Parser ()
 semi = char ';' >> return ()
