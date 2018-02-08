@@ -89,6 +89,9 @@ initVar = do
 funcDecl :: Parser Symb
 funcDecl = do
     (t, n) <- decl
+    case t of
+        (FuncType _ _) -> return ()
+        _ -> failure
     return $ FunDecl t n
 
 func :: Parser Symb
