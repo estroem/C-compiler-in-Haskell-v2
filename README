@@ -1,8 +1,5 @@
 Put C code in run.c and run "make run.exe" to compile test code.
 
-IN PROGRESS:
-Arrays
-
 TODO:
 Floats
 Proper register handling

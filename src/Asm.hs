@@ -51,8 +51,8 @@ toAsmLine (Mul reg1 reg2) _ _        = (["imul " ++ getReg reg1 ++ ", " ++ getRe
 toAsmLine (Div reg1 reg2) _ _        = (["div " ++ getReg reg1 ++ ", " ++ getReg reg2], [])
 toAsmLine (Mov reg i) _ _            = (["mov " ++ getReg reg  ++ ", " ++ show i], [])
 toAsmLine (Load reg name) _ _        = (["mov " ++ getReg reg  ++ ", [" ++ name ++ "]"], [])
-toAsmLine (Save name reg size) _ _   = (["mov " ++ (getSizeWord size) ++ " [" ++ name ++ "], " ++ getReg reg], [])
-toAsmLine (SaveToPtr reg1 reg2 size) _ _ = (["mov " ++ (getSizeWord size) ++ " [" ++ getReg reg1 ++ "], " ++ getReg reg2], [])
+toAsmLine (Save name reg size) _ _   = (["mov " ++ (getSizeWord size) ++ " [" ++ name ++ "], " ++ getPartialReg size reg], [])
+toAsmLine (SaveToPtr reg1 reg2 size) _ _ = (["mov " ++ (getSizeWord size) ++ " [" ++ getReg reg1 ++ "], " ++ getPartialReg size reg2], [])
 toAsmLine (Label name) _ _           = ([name ++ ":"], [])
 toAsmLine (Cmp reg) _ _              = (["cmp " ++ getReg reg ++ ", 0"], [])
 toAsmLine (Jmp label) _ _            = (["jmp " ++ label], [])
@@ -110,8 +110,13 @@ getReg 1 = "ebx"
 getReg 2 = "ecx"
 getReg 3 = "edx"
 
+getPartialReg :: Integer -> Reg -> String
+getPartialReg 1 r = (getReg r) !! 1 : "l"
+getPartialReg 2 r = (getReg r) !! 1 : "x"
+getPartialReg 4 r = getReg r
+
 getRegLower :: Reg -> String
-getRegLower r = (getReg r) !! 1 : "l"
+getRegLower = getPartialReg 1
 
 getSizeWordData :: Int -> String
 getSizeWordData 1 = "db"

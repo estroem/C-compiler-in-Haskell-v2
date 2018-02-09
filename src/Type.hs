@@ -1,4 +1,4 @@
-module Type ( Type (..), getIntType, canCast, getType, getTypeSize, isPrimitive, getPtrType, addType, typeIsInt ) where
+module Type ( Type (..), getIntType, canCast, getType, getTypeSize, isPrimitive, getPtrType, addType, typeIsInt, typeIsArray ) where
 
 import Data.Maybe
 import Data.List
@@ -142,3 +142,7 @@ typeIsInt (PrimType t) = case t of
     "char" -> True
     _ -> False
 typeIsInt _ = False
+
+typeIsArray :: Type -> Bool
+typeIsArray (ArrayType _ _) = True
+typeIsArray _ = False

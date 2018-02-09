@@ -295,6 +295,10 @@ compileExpr (Number x) = do
 compileExpr (Name name) = do
     reg <- getReg
     (do
+        t <- getVarType name
+        failIf (not $ typeIsArray t) ""
+        void $ freeReg >> compileExpr (App "&" [Name name])
+     ) <|> (do
         i <- getVarOffset name
         addLine $ LoadLoc reg $ toInteger i
      ) <|> (do
@@ -330,13 +334,25 @@ compileExpr (App "=" [Name name, expr]) = do
 compileExpr (App "=" [App "$" [addrExpr], valueExpr]) = do
     (addrReg, ptrTyp) <- compileExpr addrExpr
     (valueReg, valueTyp) <- compileExpr valueExpr
-    addrTyp <- maybe (failure "Cannot deref non-pointer") return $ getPtrType ptrTyp
+    addrTyp <- deref ptrTyp
     tryCast addrTyp valueTyp
     addLine $ SaveToPtr addrReg valueReg $ toInteger $ getTypeSize addrTyp
     freeReg
     return (addrReg, addrTyp)
 
-compileExpr (App "=" [ArrayDeref ex1 ex2, ex3]) = compileExpr $ App "=" [App "$" [App "+" [ex1, ex2]], ex3]
+compileExpr (App "=" [ArrayDeref addrExpr iEx, expr]) = do
+    (addrReg, ptrTyp) <- compileExpr addrExpr
+    (valueReg, valueTyp) <- compileExpr expr
+    addrTyp <- deref ptrTyp
+    tryCast addrTyp valueTyp
+    (iReg, iTyp) <- compileExpr iEx
+    fixPtrOffset iReg addrTyp
+    failIf (not $ typeIsInt iTyp) "Array index must be int"
+    addLine $ Add addrReg iReg
+    addLine $ SaveToPtr addrReg valueReg $ toInteger $ getTypeSize addrTyp
+    freeReg
+    freeReg
+    return (addrReg, addrTyp)
 
 compileExpr (App "++" [expr]) = compileExpr $ App "=" [expr, App "+" [expr, Number 1]]
 compileExpr (App "--" [expr]) = compileExpr $ App "=" [expr, App "-" [expr, Number 1]]
@@ -384,7 +400,7 @@ compileExpr (App sym [expr1, expr2]) = do
 
 compileExpr (ArrayDeref ex i) = do
     (reg, typ) <- compileExpr ex
-    newTyp <- maybe (failure "Cannot deref non-pointer") return $ getPtrType typ
+    newTyp <- deref typ
     (iReg, iTyp) <- compileExpr i
     failIf (not $ typeIsInt iTyp) $ "Array index must be integer"
     fixPtrOffset iReg typ
@@ -459,6 +475,9 @@ fixPtrOffset reg1 typ =
 
 tryCast :: Type -> Type -> Compiler ()
 tryCast l r = failIf (not $ canCast l r)  $ "Cannot autocast from " ++ show l ++ " to " ++ show r
+
+deref :: Type -> Compiler Type
+deref = maybe (failure "Cannot deref non-pointer") return . getPtrType
 
 countLocals :: [Stmt] -> Int
 countLocals [] = 0

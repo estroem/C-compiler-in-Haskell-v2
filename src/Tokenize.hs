@@ -4,7 +4,7 @@ import Data.Char
 
 import Op
 
-extraSymbols = [";", "(", ")", "{", "}", ",", "[", "]", "?", ":"]
+extraSymbols = [";", "(", ")", "{", "}", ",", "[", "]", "?", ":", "'"]
 
 tokenize :: String -> [String]
 tokenize [] = []
