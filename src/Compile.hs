@@ -293,20 +293,19 @@ compileExpr (Number x) = do
     return (reg, fromJust $ getIntType x)
 
 compileExpr (Name name) = do
-    reg <- getReg
-    (do
-        t <- getVarType name
+    r <- getReg
+    t <- getVarType name <|> getFunType name
+    loadArray t <|> loadLoc r <|> loadFun r <|> loadGlo r
+    return (r, t)
+    where
+    loadArray t = do
         failIf (not $ typeIsArray t) ""
         void $ freeReg >> compileExpr (App "&" [Name name])
-     ) <|> (do
+    loadLoc r = do 
         i <- getVarOffset name
-        addLine $ LoadLoc reg $ toInteger i
-     ) <|> (do
-        getFunType name >> (addLine $ Load reg $ underscore ++ name)
-        <|> (getVarType name >> (addLine $ Load reg name))
-     )
-    typ <- getVarType name <|> getFunType name
-    return (reg, typ)
+        addLine $ LoadLoc r $ toInteger i
+    loadGlo r = getVarType name >> (addLine $ Load r name)
+    loadFun r = getFunType name >> (addLine $ Load r $ underscore ++ name)
 
 compileExpr (App "+" [expr1, expr2]) = handleSummation "+" expr1 expr2
 compileExpr (App "-" [expr1, expr2]) = handleSummation "-" expr1 expr2
@@ -321,31 +320,27 @@ compileExpr (App "&" [Name name]) = do
 
 compileExpr (App "=" [Name name, expr]) = do
     (reg, typ) <- compileExpr expr
-    varTyp <- getVarType name
+    varTyp     <- getVarType name
     tryCast varTyp typ
-    (do
-        i <- toInteger <$> getVarOffset name
-        addLine $ SaveLoc i reg
-     ) <|> (do
-        addLine $ Save name reg $ toInteger $ getTypeSize varTyp
-     )
+    (SaveLoc reg <$> toInteger <$> getVarOffset name >>= addLine)
+        <|> (addLine $ Save name reg $ toInteger $ getTypeSize varTyp)
     return (reg, varTyp)
 
 compileExpr (App "=" [App "$" [addrExpr], valueExpr]) = do
-    (addrReg, ptrTyp) <- compileExpr addrExpr
+    (addrReg, ptrTyp)    <- compileExpr addrExpr
     (valueReg, valueTyp) <- compileExpr valueExpr
-    addrTyp <- deref ptrTyp
+    addrTyp              <- deref ptrTyp
     tryCast addrTyp valueTyp
     addLine $ SaveToPtr addrReg valueReg $ toInteger $ getTypeSize addrTyp
     freeReg
     return (addrReg, addrTyp)
 
 compileExpr (App "=" [ArrayDeref addrExpr iEx, expr]) = do
-    (addrReg, ptrTyp) <- compileExpr addrExpr
+    (addrReg, ptrTyp)    <- compileExpr addrExpr
     (valueReg, valueTyp) <- compileExpr expr
-    addrTyp <- deref ptrTyp
+    (iReg, iTyp)         <- compileExpr iEx
+    addrTyp              <- deref ptrTyp
     tryCast addrTyp valueTyp
-    (iReg, iTyp) <- compileExpr iEx
     fixPtrOffset iReg addrTyp
     failIf (not $ typeIsInt iTyp) "Array index must be int"
     addLine $ Add addrReg iReg
