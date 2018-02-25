@@ -148,7 +148,7 @@ return' :: Parser Stmt
 return' = string "return" >> (Return <$> (Just <$> expr) <|> return Nothing) <* semi
 
 expr :: Parser Expr
-expr = binAppR ["="] ternary
+expr = binAppR ["=", "+=", "-=", "*=", "/="] ternary
 
 ternary :: Parser Expr
 ternary = do

@@ -318,6 +318,11 @@ compileExpr (App "&" [Name name]) = do
         <|> failure "Can only get address of l-value"
     return (reg, PtrType typ)
 
+compileExpr (App "+=" [expr1, expr2]) = compileExpr $ App "=" [expr1, App "+" [expr1, expr2]]
+compileExpr (App "-=" [expr1, expr2]) = compileExpr $ App "=" [expr1, App "-" [expr1, expr2]]
+compileExpr (App "*=" [expr1, expr2]) = compileExpr $ App "=" [expr1, App "*" [expr1, expr2]]
+compileExpr (App "/=" [expr1, expr2]) = compileExpr $ App "=" [expr1, App "/" [expr1, expr2]]
+    
 compileExpr (App "=" [Name name, expr]) = do
     (reg, typ) <- compileExpr expr
     varTyp     <- getVarType name
