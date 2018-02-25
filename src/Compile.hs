@@ -428,12 +428,13 @@ compileExpr c@(Call ex args) = callByName c <|> callByAddr c
 
 callByName (Call (Name name) args) = do
     retType <- funRetType <$> getFun name
-    reg <- getReg
-    when (reg /= reg_eax) $ addLine $ Push reg_eax
+    reg     <- borrowReg
+    when (reg /= reg_eax) $ addLine $ Push reg_eax -- freeReg0
     handleCallArgs args
+    _ <- getReg
     addLine $ CallName (underscore ++ name) [] 0
     when (length args > 0) $ addLine $ AddConst reg_esp $ toInteger $ length args * 4
-    when (reg /= reg_eax) $ addLines [MovReg reg reg_eax, Pop reg_eax]
+    when (reg /= reg_eax) $ addLines [MovReg reg reg_eax, Pop reg_eax] -- getReg0
     return (reg, retType)
 
 callByAddr (Call ex args) = do
