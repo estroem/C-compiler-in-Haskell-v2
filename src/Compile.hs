@@ -475,7 +475,7 @@ fixPtrOffset reg1 typ =
         $ getPtrType typ
 
 tryCast :: Type -> Type -> Compiler ()
-tryCast l r = failIf (not $ canCast l r)  $ "Cannot autocast from " ++ show l ++ " to " ++ show r
+tryCast l r = failIf (not $ canCast l r)  $ "Cannot autocast from " ++ show r ++ " to " ++ show l
 
 deref :: Type -> Compiler Type
 deref = maybe (failure "Cannot deref non-pointer") return . getPtrType
