@@ -195,7 +195,7 @@ unaryL :: Parser Expr
 unaryL = unAppL ["&", "!", "*", "++", "--"] unaryR
 
 unaryR :: Parser Expr
-unaryR = unAppR ["++", "--"] $ number <|> name <|> literal <|> (parens expr)
+unaryR = unAppR ["++", "--"] $ number <|> float <|> name <|> literal <|> (parens expr)
 
 binAppL :: [String] -> Parser Expr -> Parser Expr
 binAppL s p = p >>= (binAppL' s p) where
@@ -264,6 +264,9 @@ name = Name <$> identifier
 
 number :: Parser Expr
 number = Number <$> int
+
+float :: Parser Expr
+float = Float <$> floatnum
     
 identifier :: Parser String
 identifier = cond (all isAlphaNum) single
@@ -313,6 +316,9 @@ cond f p = do
     
 int :: Parser Integer
 int = read <$> cond (all isDigit) single
+
+floatnum :: Parser Float
+floatnum = read <$> cond (all $ \ t -> isDigit t || t == '.') single
 
 string :: String -> Parser String
 string s = cond (==s) single

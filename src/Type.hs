@@ -1,4 +1,4 @@
-module Type ( Type (..), getIntType, canCast, getType, getTypeSize, isPrimitive, getPtrType, addType, typeIsInt, typeIsArray ) where
+module Type ( Type (..), getFloatType, getIntType, canCast, getType, getTypeSize, isPrimitive, getPtrType, addType, typeIsFloat, typeIsInt, typeIsArray ) where
 
 import Data.Maybe
 import Data.List
@@ -20,6 +20,8 @@ instance Show Type where
 
 prims = [("int", 4), ("short", 2), ("char", 1), ("float", 4), ("double", 8)]
 
+getFloatType :: Float -> Maybe Type
+getFloatType _ = Just $ PrimType "float"
 
 getIntType :: Integer -> Maybe Type
 getIntType i =
@@ -31,9 +33,9 @@ getIntType i =
 canCast :: Type -> Type -> Bool
 canCast (PrimType l) (PrimType r)
     | l == r = True
-    | typeIsFloat l && typeIsFloat r = (typeSize l) > (typeSize r)
-    | not (typeIsFloat l) && typeIsFloat r = False
-    | typeIsFloat l && not (typeIsFloat r) = True
+    | primIsFloat l && primIsFloat r = (typeSize l) > (typeSize r)
+    | not (primIsFloat l) && primIsFloat r = False
+    | primIsFloat l && not (primIsFloat r) = True
     | otherwise = (typeSize l) > (typeSize r)
 canCast l r = l == r
 
@@ -70,27 +72,27 @@ getMulType l r = getAddType l r
 getAddType :: Type -> Type -> Maybe Type
 getAddType (PrimType l) (PrimType r)
     | l == r = Just $ PrimType l
-    | typeIsFloat l && typeIsFloat r = Just $ PrimType $ biggestType l r
-    | not (typeIsFloat l) && typeIsFloat r = Just $ PrimType r
-    | typeIsFloat l && not (typeIsFloat r) = Just $ PrimType l
+    | primIsFloat l && primIsFloat r = Just $ PrimType $ biggestType l r
+    | not (primIsFloat l) && primIsFloat r = Just $ PrimType r
+    | primIsFloat l && not (primIsFloat r) = Just $ PrimType l
     | otherwise = Just $ PrimType $ biggestType l r
 getAddType (PtrType _) (PtrType _) = Nothing
 getAddType l@(PtrType _) (PrimType r)
-    | typeIsFloat r = Nothing
+    | primIsFloat r = Nothing
     | otherwise = Just l
 getAddType (PrimType l) r@(PtrType _)
-    | typeIsFloat l = Nothing
+    | primIsFloat l = Nothing
     | otherwise = Just r
 getAddType l@(ArrayType _ _) (PrimType r)
-    | typeIsFloat r = Nothing
+    | primIsFloat r = Nothing
     | otherwise = Just l
 getAddType (PrimType l) r@(ArrayType _ _)
-    | typeIsFloat l = Nothing
+    | primIsFloat l = Nothing
     | otherwise = Just r
 getAddType _ _ = Nothing
 
-typeIsFloat :: String -> Bool
-typeIsFloat t = if t == "float" || t == "double" then True else False
+primIsFloat :: String -> Bool
+primIsFloat t = t == "float" || t == "double"
 
 biggestType :: String -> String -> String
 biggestType a b = if (f a) >= (f b) then a else b
@@ -134,6 +136,10 @@ addType EmptyType b = b
 addType (PtrType a) b = (PtrType (addType a b))
 addType (FuncType a c) b = (FuncType (addType a b) c)
 addType (ArrayType a i) b = (ArrayType (addType a b) i)
+
+typeIsFloat :: Type -> Bool
+typeIsFloat (PrimType t) = primIsFloat t
+typeIsFloat _ = False
 
 typeIsInt :: Type -> Bool
 typeIsInt (PrimType t) = case t of

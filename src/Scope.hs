@@ -26,7 +26,7 @@ data Fun = Fun
     , numLocals :: Int
     } deriving (Show)
 
-data Value = Integer Int | Float Float | String String
+data Value = Integer Int | FloatingPoint Float | String String
     deriving (Show, Eq)
 
 --           Scope globals statics locals functions
