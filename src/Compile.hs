@@ -12,66 +12,12 @@ import Pseudo
 import Asm
 import Ast
 import qualified Id
+import Env
 
 compile :: File -> (Pseudo, Scope, [Lit], [Float])
 compile = runCompiler . compileFile
 
 underscore = "_"
-
------ ENVIRONMENT -----
-
-type Env = (Pseudo, Reg, Scope, Id.Id, Bool, [Lit], [Float])
-
-startReg = 0
-emptyEnv = ([], startReg, emptyScope, ([], 0), False, [], [])
-
-envGetResult :: Env -> (Pseudo, Scope, [Lit], [Float])
-envGetResult (a, r, s, i, f, str, fl) = (a, s, str, fl)
-
-envGetAsm :: Env -> Pseudo
-envGetAsm (s, _, _, _, _, _, _) = s
-
-getRegFromEnv :: Env -> Reg
-getRegFromEnv (_, r, _, _, _, _, _) = r
-
-envFreeReg :: Env -> Env
-envFreeReg (a, r, s, i, f, str, fl) = (a, r - 1, s, i, f, str, fl)
-
-addLineToEnv :: PseudoLine -> Env -> Env
-addLineToEnv l (xs, r, s, i, f, str, fl) = (xs++[l], r, s, i, f, str, fl)
-
-addStrToEnv :: String -> Env -> Env
-addStrToEnv str (xs, r, s, i, f, strs, fl) = (xs, r, s, i, f, str:strs, fl)
-
-envStrLen :: Env -> Int
-envStrLen (_, _, _, _, _, str, _) = foldr (\ a b -> b + length a + 1) 0 str
-
-addFloatToEnv :: Float -> Env -> Env
-addFloatToEnv float (xs, r, s, i, f, str, fl) = (xs, r, s, i, f, str, float:fl)
-
-envFloatLen :: Env -> Int
-envFloatLen (_, _, _, _, _, _, fl) = 8 * length fl
-
-nextReg :: Env -> Env
-nextReg (env, r, s, i, f, str, fl) = (env, r + 1, s, i, f, str, fl)
-
-envGetScope :: Env -> Scope
-envGetScope (_, _, s, _, _, _, _) = s
-
-envSetScope :: Scope -> Env -> Env
-envSetScope s (a, r, _, i, f, str, fl) = (a, r, s, i, f, str, fl)
-
-envGetId :: Env -> Id.Id
-envGetId (_, _, _, i, _, _, _) = i
-
-envSetId :: Id.Id -> Env -> Env
-envSetId i (a, r, s, _, f, str, fl) = (a, r, s, i, f, str, fl)
-
-envGetFloat :: Env -> Bool
-envGetFloat (_, _, _, _, f, _, _) = f
-
-envSetFloat :: Bool -> Env -> Env
-envSetFloat f (a, r, s, i, _, str, fl) = (a, r, s, i, f, str, fl)
 
 ----- BASIC MONAD -----
 
