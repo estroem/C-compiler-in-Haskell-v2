@@ -18,7 +18,8 @@ import Asm
 --- COMPILE
 
 run :: String -> Asm
-run = (uncurry toAsm) . compile . parse . tokenize
+run str = toAsm a b c d where
+    (a, b, c, d) = compile $ parse $ tokenize $ str
 
 --- MAIN
 

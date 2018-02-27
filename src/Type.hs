@@ -21,7 +21,7 @@ instance Show Type where
 prims = [("int", 4), ("short", 2), ("char", 1), ("float", 4), ("double", 8)]
 
 getFloatType :: Float -> Maybe Type
-getFloatType _ = Just $ PrimType "float"
+getFloatType _ = Just $ PrimType "double"
 
 getIntType :: Integer -> Maybe Type
 getIntType i =
@@ -120,6 +120,8 @@ getTypeSize (PrimType "int") = 4
 getTypeSize (PrimType "short") = 2
 getTypeSize (PrimType "byte") = 1
 getTypeSize (PrimType "char") = 1
+getTypeSize (PrimType "float") = 4
+getTypeSize (PrimType "double") = 8
 
 isPrimitive :: String -> Bool
 isPrimitive str = elem str $ fst $ unzip prims

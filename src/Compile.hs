@@ -13,50 +13,65 @@ import Asm
 import Ast
 import qualified Id
 
-compile :: File -> (Pseudo, Scope)
+compile :: File -> (Pseudo, Scope, [Lit], [Float])
 compile = runCompiler . compileFile
 
 underscore = "_"
 
 ----- ENVIRONMENT -----
 
-type Env = (Pseudo, Reg, Scope, Id.Id, Bool)
+type Env = (Pseudo, Reg, Scope, Id.Id, Bool, [Lit], [Float])
 
 startReg = 0
-emptyEnv = ([], startReg, emptyScope, ([], 0), False)
+emptyEnv = ([], startReg, emptyScope, ([], 0), False, [], [])
+
+envGetResult :: Env -> (Pseudo, Scope, [Lit], [Float])
+envGetResult (a, r, s, i, f, str, fl) = (a, s, str, fl)
 
 envGetAsm :: Env -> Pseudo
-envGetAsm (s, _, _, _, _) = s
+envGetAsm (s, _, _, _, _, _, _) = s
 
 getRegFromEnv :: Env -> Reg
-getRegFromEnv (_, r, _, _, _) = r
+getRegFromEnv (_, r, _, _, _, _, _) = r
 
 envFreeReg :: Env -> Env
-envFreeReg (a, r, s, i, f) = (a, r - 1, s, i, f)
+envFreeReg (a, r, s, i, f, str, fl) = (a, r - 1, s, i, f, str, fl)
 
 addLineToEnv :: PseudoLine -> Env -> Env
-addLineToEnv l (xs, r, s, i, f) = (xs++[l], r, s, i, f)
+addLineToEnv l (xs, r, s, i, f, str, fl) = (xs++[l], r, s, i, f, str, fl)
+
+addStrToEnv :: String -> Env -> Env
+addStrToEnv str (xs, r, s, i, f, strs, fl) = (xs, r, s, i, f, str:strs, fl)
+
+envStrLen :: Env -> Int
+envStrLen (_, _, _, _, _, str, _) = foldr (\ a b -> b + length a) 0 str
+
+addFloatToEnv :: Float -> Env -> Env
+addFloatToEnv float (xs, r, s, i, f, str, fl) = (xs, r, s, i, f, str, float:fl)
+
+envFloatLen :: Env -> Int
+envFloatLen (_, _, _, _, _, _, fl) = 8 * length fl
 
 nextReg :: Env -> Env
-nextReg (env, r, s, i, f) = (env, r + 1, s, i, f)
+nextReg (env, r, s, i, f, str, fl) = (env, r + 1, s, i, f, str, fl)
 
 envGetScope :: Env -> Scope
-envGetScope (_, _, s, _, _) = s
+envGetScope (_, _, s, _, _, _, _) = s
 
 envSetScope :: Scope -> Env -> Env
-envSetScope s (a, r, _, i, f) = (a, r, s, i, f)
+envSetScope s (a, r, _, i, f, str, fl) = (a, r, s, i, f, str, fl)
 
 envGetId :: Env -> Id.Id
-envGetId (_, _, _, i, _) = i
+envGetId (_, _, _, i, _, _, _) = i
 
 envSetId :: Id.Id -> Env -> Env
-envSetId i (a, r, s, _, f) = (a, r, s, i, f)
+envSetId i (a, r, s, _, f, str, fl) = (a, r, s, i, f, str, fl)
 
 envGetFloat :: Env -> Bool
-envGetFloat (_, _, _, _, f) = f
+envGetFloat (_, _, _, _, f, _, _) = f
 
 envSetFloat :: Bool -> Env -> Env
-envSetFloat f (a, r, s, i, _) = (a, r, s, i, f)
+envSetFloat f (a, r, s, i, _, str, fl) = (a, r, s, i, f, str, fl)
 
 ----- BASIC MONAD -----
 
@@ -95,8 +110,8 @@ failIf :: Bool -> Error -> Compiler ()
 failIf True e = failure e
 failIf False _ = return ()
 
-runCompiler :: Compiler () -> (Pseudo, Scope)
-runCompiler (C c) = either (\ (e, _) -> (envGetAsm e, envGetScope e)) error $ c emptyEnv
+runCompiler :: Compiler () -> (Pseudo, Scope, [Lit], [Float])
+runCompiler (C c) = either (envGetResult . fst) error $ c emptyEnv
 
 loop :: (Monad m) => (a -> m ()) -> [a] -> m ()
 loop _ [] = return ()
@@ -121,6 +136,12 @@ addLine l = C $ \ env -> Left (addLineToEnv l env, ())
 
 addLines :: Pseudo -> Compiler ()
 addLines = loop addLine
+
+addStringLit :: String -> Compiler Int
+addStringLit x = C $ \ env -> Left (addStrToEnv x env, envStrLen env)
+
+addFloatLit :: Float -> Compiler Int
+addFloatLit x = C $ \ env -> Left (addFloatToEnv x env, envFloatLen env)
 
 getState :: Compiler Env
 getState = C $ \ env -> Left (env, env)
@@ -316,17 +337,20 @@ compileStmt (Expr expr) = compileExpr expr >> freeReg >> return ()
 
 compileExpr (Literal s) = do
     reg <- getReg
-    addLine $ LoadLit reg s
+    LoadLit reg <$> addStringLit s >>= addLine
     return (reg, PtrType $ PrimType "char")
 
-compileExpr (Number x) = do
-    reg <- getReg
-    addLine $ Mov reg x
-    return (reg, fromJust $ getIntType x)
+compileExpr (Number x) = ifElseM getFloatFlag floatNum intNum where
+    intNum = do
+        reg <- getReg
+        addLine $ Mov reg x
+        return (reg, fromJust $ getIntType x)
+    floatNum = compileExpr (Float $ fromIntegral x)
 
 compileExpr (Float x) = do
-    addLine $ LoadFloat x
-    return (undefined, fromJust $ getFloatType x)
+    let typ = fromJust $ getFloatType x
+    LoadFloat 8 <$> addFloatLit x >>= addLine
+    return (0, typ)
 
 compileExpr (Name name) = do
     r <- getReg
@@ -342,9 +366,6 @@ compileExpr (Name name) = do
         addLine $ LoadLoc r $ toInteger i
     loadGlo r = getVarType name >> (addLine $ Load r name)
     loadFun r = getFunType name >> (addLine $ Load r $ underscore ++ name)
-
-compileExpr (App "+" [expr1, expr2]) = handleSummation "+" expr1 expr2
-compileExpr (App "-" [expr1, expr2]) = handleSummation "-" expr1 expr2
 
 compileExpr (App "&" [Name name]) = do
     reg <- getReg
@@ -421,7 +442,10 @@ compileExpr (App sym [expr1, expr2]) = do
             float $ compileExpr expr1
             float $ compileExpr expr2
             floatExpr sym type1 type2
-        else error "sdfasd" --(intExpr sym) <$> compileExpr expr1 <*> compileExpr expr2
+        else do
+            e1 <- compileExpr expr1
+            e2 <- compileExpr expr2
+            intExpr sym e1 e2
 
 compileExpr (ArrayDeref ex i) = do
     (reg, typ) <- compileExpr ex
@@ -455,10 +479,10 @@ callByName (Call (Name name) args) = do
     retType <- funRetType <$> getFun name
     reg     <- borrowReg
     when (reg /= reg_eax) $ addLine $ Push reg_eax -- freeReg0
-    handleCallArgs args
-    _ <- getReg
+    size <- handleCallArgs args
+    _    <- getReg
     addLine $ CallName (underscore ++ name) [] 0
-    when (length args > 0) $ addLine $ AddConst reg_esp $ toInteger $ length args * 4
+    when (length args > 0) $ addLine $ AddConst reg_esp $ toInteger size
     when (reg /= reg_eax) $ addLines [MovReg reg reg_eax, Pop reg_eax] -- getReg0
     return (reg, retType)
 
@@ -468,33 +492,25 @@ callByAddr (Call ex args) = do
         (PtrType (FuncType _ _)) -> return ()
         _ -> failure $ (show typ) ++ "Not a pointer to a function"
     when (reg /= reg_eax) $ addLine $ Push reg_eax
-    handleCallArgs args
+    size <- handleCallArgs args
     addLine $ CallAddr reg [] 0
-    when (length args > 0) $ addLine $ AddConst reg_esp $ toInteger $ length args * 4
+    when (length args > 0) $ addLine $ AddConst reg_esp $ toInteger size
     when (reg /= reg_eax) $ addLines [MovReg reg reg_eax, Pop reg_eax]
     return (reg, typ)
 
-handleSummation :: String -> Expr -> Expr -> Compiler (Reg, Type)
-handleSummation s expr1 expr2 = do
-    (reg1, type1) <- compileExpr expr1
-    (reg2, type2) <- compileExpr expr2
-    let retType = getType s type1 type2
-    failIf (not $ isJust retType) "Incompatible types"
-    ifElseM getFloatFlag (do
-        addLine $ if s == "+" then Fadd else Fsub
+handleCallArgs :: [Expr] -> Compiler Int
+handleCallArgs = foldM (\ a b -> (+a) <$> (pushFloat b <|> push b)) 0 . reverse where
+    pushFloat e = do
+        ts <- getTypeSize <$> snd <$> isFloat (compileExpr e)
+        addLines [SubConst reg_esp (toInteger ts), FstReg reg_esp ts]
+        return ts
+    push e = do
+        (r, t) <- compileExpr e
+        addLine $ Push r
         freeReg
-     ) (do
-        fixPtrOffset reg1 type2
-        fixPtrOffset reg2 type1
-        addLine $ (if s == "+" then Add else Sub) reg1 reg2
-     )
-    freeReg
-    return (reg1, fromJust retType)
-
-handleCallArgs :: [Expr] -> Compiler ()
-handleCallArgs = loop (\ e -> pushFloat e <|> push e) . reverse where
-    pushFloat e = isFloat (compileExpr e) >> addLines [FstReg reg_esp, SubConst reg_esp 4]
-    push e      = compileExpr e >>= addLine <$> Push <$> fst >> freeReg
+        if getTypeSize t < 4
+            then return 4
+            else return $ getTypeSize t
 
 fixPtrOffset :: Reg -> Type -> Compiler ()
 fixPtrOffset reg1 typ =
@@ -509,7 +525,12 @@ fixPtrOffset reg1 typ =
 intExpr sym (reg1, type1) (reg2, type2) = do 
     let retType = getType sym type1 type2
     failIf (retType == Nothing) "Incompatible types"
+    when (sym == "+" || sym == "-") $ do
+        fixPtrOffset reg1 type2
+        fixPtrOffset reg2 type1
     case sym of
+        "+" -> addLine $ Add reg1 reg2
+        "-" -> addLine $ Sub reg1 reg2
         "*" -> addLine $ Mul reg1 reg2
         "/" -> addLine $ Div reg1 reg2
         "==" -> addLines [Sub reg1 reg2, Setz reg1, AndConst reg1 1]
@@ -531,6 +552,8 @@ floatExpr sym type1 type2 = do
     failIf (retType == Nothing) "Incompatible types"
     reg <- ifElseM (return $ not $ typeIsFloat $ fromJust retType) getReg $ return undefined
     case sym of
+        "+"  -> addLine Fadd
+        "-"  -> addLine Fsub
         "*"  -> addLine Fmul
         "/"  -> addLine Fdiv
         "==" -> addLine Feq

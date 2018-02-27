@@ -12,13 +12,14 @@ type AsmLine = String
 type Asm = [AsmLine]
 
 
-toAsm :: Pseudo -> Scope -> Asm
-toAsm r scope@(Scope gs ss _ _ fs) = toAsmExtern fs ++ toAsmGlobals fs ++
+toAsm :: Pseudo -> Scope -> [Lit] -> [Float] -> Asm
+toAsm r scope@(Scope gs ss _ _ fs) lits floats = toAsmExtern fs ++ toAsmGlobals fs ++
                                ["section .data"] ++ (map toAsmDataLine $ gs ++ ss) ++
                                ["section .rodata", "?strings:"] ++ (map toAsmLitLine lits) ++
+                               ["?floats:"] ++ (map toAsmFloatLine floats) ++
                                ["section .text"] ++ asm
     where
-        (asm, lits) = toAsmLines $ map (retNumLocals scope) r
+        asm = toAsmLines $ map (retNumLocals scope) r
 
 toAsmGlobals :: [Fun] -> Asm
 toAsmGlobals funs = map (\ f -> "global _" ++ funName f) (filter funIsDef funs)
@@ -37,67 +38,67 @@ toAsmDataLine (Var n t v _) = n ++ ": " ++ (getSizeWordData $ getTypeSize t) ++ 
 toAsmLitLine :: Lit -> String
 toAsmLitLine l = "db `" ++ l ++ "`, 0"
 
-toAsmLines :: Pseudo -> (Asm, [Lit])
-toAsmLines rtl = toAsmLinesLoop rtl 0 [] [] where
-    toAsmLinesLoop [] _ asm lits = (asm, lits)
-    toAsmLinesLoop (x:xs) i asm lits = toAsmLinesLoop xs (i+1) (asm++lines) (lits++newLit)
-        where
-            (lines, newLit) = toAsmLine x i lits
+toAsmFloatLine :: Float -> String
+toAsmFloatLine f = "dq " ++ show f
 
-toAsmLine :: PseudoLine -> Integer -> [Lit] -> ([AsmLine], [Lit])
-toAsmLine (Add reg1 reg2) _ _        = (["add " ++ getReg reg1 ++ ", " ++ getReg reg2], [])
-toAsmLine (Sub reg1 reg2) _ _        = (["sub " ++ getReg reg1 ++ ", " ++ getReg reg2], [])
-toAsmLine (Mul reg1 reg2) _ _        = (["imul " ++ getReg reg1 ++ ", " ++ getReg reg2], [])
-toAsmLine (Div reg1 reg2) _ _        = (["div " ++ getReg reg1 ++ ", " ++ getReg reg2], [])
-toAsmLine (Mov reg i) _ _            = (["mov " ++ getReg reg  ++ ", " ++ show i], [])
-toAsmLine (Load reg name) _ _        = (["mov " ++ getReg reg  ++ ", [" ++ name ++ "]"], [])
-toAsmLine (Save name reg size) _ _   = (["mov " ++ (getSizeWord size) ++ " [" ++ name ++ "], " ++ getPartialReg size reg], [])
-toAsmLine (SaveToPtr reg1 reg2 size) _ _ = (["mov " ++ (getSizeWord size) ++ " [" ++ getReg reg1 ++ "], " ++ getPartialReg size reg2], [])
-toAsmLine (Label name) _ _           = ([name ++ ":"], [])
-toAsmLine (Cmp reg) _ _              = (["cmp " ++ getReg reg ++ ", 0"], [])
-toAsmLine (Jmp label) _ _            = (["jmp " ++ label], [])
-toAsmLine (Je label) _ _             = (["je " ++ label], [])
-toAsmLine (Jne label) _ _            = (["jne " ++ label], [])
-toAsmLine (Jle label) _ _            = (["jle " ++ label], [])
-toAsmLine (Jl label) _ _             = (["jl " ++ label], [])
-toAsmLine (CallName name args _) _ _ = (["call " ++ name], [])
-toAsmLine (CallAddr addr args _) _ _ = (["call " ++ getReg addr], [])
-toAsmLine (DeRef reg) _ _            = (["mov " ++ getReg reg ++ ", [" ++ getReg reg ++ "]"], [])
-toAsmLine (Ret i) _ _                = ((if (read i) > 0 then ["add " ++ getReg reg_esp ++ ", " ++ i] else []) ++ ["pop " ++ getReg reg_ebp, "ret"], [])
-toAsmLine (Push reg) _ _             = (["push " ++ getReg reg], [])
-toAsmLine (Pop reg) _ _              = (["pop " ++ getReg reg], [])
-toAsmLine (LoadLoc reg offset) _ _   = (["mov " ++ getReg reg ++ ", [" ++ getReg reg_ebp ++ (if offset > 0 then "+" else "") ++ show offset ++ "]"], [])
-toAsmLine (SaveLoc reg offset) _ _   = (["mov [" ++ getReg reg_ebp ++ (if offset > 0 then "+" else "") ++ show offset ++ "], " ++ getReg reg], [])
-toAsmLine (AddConst reg int)  _ _    = (["add " ++ getReg reg ++ ", " ++ show int], [])
-toAsmLine (SubConst reg int) _ _     = (["sub " ++ getReg reg ++ ", " ++ show int], [])
-toAsmLine (MulConst reg int) _ _     = (["mul " ++ getReg reg ++ ", " ++ show int], [])
-toAsmLine (DivConst reg int) _ _     = (["div " ++ getReg reg ++ ", " ++ show int], [])
-toAsmLine (LoadLit reg l) _ ls       = (["mov " ++ getReg reg ++ ", ?strings + " ++ show (litsGetSize ls)], [l])
-toAsmLine (MovReg reg1 reg2) _ _     = (["mov " ++ getReg reg1 ++ ", " ++ getReg reg2], [])
-toAsmLine (Addr reg name) _ _        = (["mov " ++ getReg reg ++ ", " ++ name], [])
-toAsmLine (AddrLoc reg offset) _ _   = (["lea " ++ getReg reg ++ ", [" ++ getReg reg_ebp ++ (if offset > 0 then "+" else "") ++ show offset ++ "]"], [])
-toAsmLine (Test reg) _ _             = (["test " ++ getReg reg ++ ", " ++ getReg reg], [])
-toAsmLine (Setz reg) _ _             = (["setz " ++ getRegLower reg], [])
-toAsmLine (Setl reg) _ _             = (["setl " ++ getRegLower reg], [])
-toAsmLine (Setg reg) _ _             = (["setg " ++ getRegLower reg], [])
-toAsmLine (Setle reg) _ _            = (["setle " ++ getRegLower reg], [])
-toAsmLine (Setge reg) _ _            = (["setge " ++ getRegLower reg], [])
-toAsmLine (AndConst reg i) _ _       = (["and " ++ getReg reg ++ ", " ++ show i], [])
-toAsmLine (Or reg1 reg2) _ _         = (["or " ++ getReg reg1 ++ ", " ++ getReg reg2], [])
-toAsmLine (Xor reg1 reg2) _ _        = (["xor " ++ getReg reg1 ++ ", " ++ getReg reg2], [])
-toAsmLine (And reg1 reg2) _ _        = (["and " ++ getReg reg1 ++ ", " ++ getReg reg2], [])
-toAsmLine (Shl reg) _ _              = (["shl " ++ getReg reg ++ ", cl"], [])
-toAsmLine (Shr reg) _ _              = (["shr " ++ getReg reg ++ ", cl"], [])
-toAsmLine (Inc reg) _ _              = (["inc " ++ getReg reg], [])
-toAsmLine (Dec reg) _ _              = (["dec " ++ getReg reg], [])
-toAsmLine (Fadd) _ _                 = (["fadd "], [])
-toAsmLine (Fsub) _ _                 = (["fsub "], [])
-toAsmLine (Fmul) _ _                 = (["fmul "], [])
-toAsmLine (Fdiv) _ _                 = (["fdiv "], [])
-toAsmLine (Fld x) _ _                = (["fld " ++ show x], [])
-toAsmLine (FldReg reg) _ _           = (["fld [" ++ getReg reg ++ "]"], [])
-toAsmLine (Fst x) _ _                = (["fst " ++ show x], [])
-toAsmLine (FstReg reg) _ _           = (["fst [" ++ getReg reg ++ "]"], [])
+toAsmLines :: Pseudo -> Asm
+toAsmLines rtl = toAsmLinesLoop rtl [] where
+    toAsmLinesLoop [] asm = asm
+    toAsmLinesLoop (x:xs) asm = toAsmLinesLoop xs (asm++(toAsmLine x))
+
+toAsmLine :: PseudoLine -> [AsmLine]
+toAsmLine (Add reg1 reg2)            = ["add " ++ getReg reg1 ++ ", " ++ getReg reg2]
+toAsmLine (Sub reg1 reg2)            = ["sub " ++ getReg reg1 ++ ", " ++ getReg reg2]
+toAsmLine (Mul reg1 reg2)            = ["imul " ++ getReg reg1 ++ ", " ++ getReg reg2]
+toAsmLine (Div reg1 reg2)            = ["div " ++ getReg reg1 ++ ", " ++ getReg reg2]
+toAsmLine (Mov reg i)                = ["mov " ++ getReg reg  ++ ", " ++ show i]
+toAsmLine (Load reg name)            = ["mov " ++ getReg reg  ++ ", [" ++ name ++ "]"]
+toAsmLine (Save name reg size)       = ["mov " ++ (getSizeWord size) ++ " [" ++ name ++ "], " ++ getPartialReg size reg]
+toAsmLine (SaveToPtr reg1 reg2 size) = ["mov " ++ (getSizeWord size) ++ " [" ++ getReg reg1 ++ "], " ++ getPartialReg size reg2]
+toAsmLine (Label name)               = [name ++ ":"]
+toAsmLine (Cmp reg)                  = ["cmp " ++ getReg reg ++ ", 0"]
+toAsmLine (Jmp label)                = ["jmp " ++ label]
+toAsmLine (Je label)                 = ["je " ++ label]
+toAsmLine (Jne label)                = ["jne " ++ label]
+toAsmLine (Jle label)                = ["jle " ++ label]
+toAsmLine (Jl label)                 = ["jl " ++ label]
+toAsmLine (CallName name args _)     = ["call " ++ name]
+toAsmLine (CallAddr addr args _)     = ["call " ++ getReg addr]
+toAsmLine (DeRef reg)                = ["mov " ++ getReg reg ++ ", [" ++ getReg reg ++ "]"]
+toAsmLine (Ret i)                    = (if (read i) > 0 then ["add " ++ getReg reg_esp ++ ", " ++ i] else []) ++ ["pop " ++ getReg reg_ebp, "ret"]
+toAsmLine (Push reg)                 = ["push " ++ getReg reg]
+toAsmLine (Pop reg)                  = ["pop " ++ getReg reg]
+toAsmLine (LoadLoc reg offset)       = ["mov " ++ getReg reg ++ ", [" ++ getReg reg_ebp ++ (if offset > 0 then "+" else "") ++ show offset ++ "]"]
+toAsmLine (SaveLoc reg offset)       = ["mov [" ++ getReg reg_ebp ++ (if offset > 0 then "+" else "") ++ show offset ++ "], " ++ getReg reg]
+toAsmLine (AddConst reg int)         = ["add " ++ getReg reg ++ ", " ++ show int]
+toAsmLine (SubConst reg int)         = ["sub " ++ getReg reg ++ ", " ++ show int]
+toAsmLine (MulConst reg int)         = ["mul " ++ getReg reg ++ ", " ++ show int]
+toAsmLine (DivConst reg int)         = ["div " ++ getReg reg ++ ", " ++ show int]
+toAsmLine (LoadLit reg i)            = ["mov " ++ getReg reg ++ ", ?strings + " ++ show i]
+toAsmLine (MovReg reg1 reg2)         = ["mov " ++ getReg reg1 ++ ", " ++ getReg reg2]
+toAsmLine (Addr reg name)            = ["mov " ++ getReg reg ++ ", " ++ name]
+toAsmLine (AddrLoc reg offset)       = ["lea " ++ getReg reg ++ ", [" ++ getReg reg_ebp ++ (if offset > 0 then "+" else "") ++ show offset ++ "]"]
+toAsmLine (Test reg)                 = ["test " ++ getReg reg ++ ", " ++ getReg reg]
+toAsmLine (Setz reg)                 = ["setz " ++ getRegLower reg]
+toAsmLine (Setl reg)                 = ["setl " ++ getRegLower reg]
+toAsmLine (Setg reg)                 = ["setg " ++ getRegLower reg]
+toAsmLine (Setle reg)                = ["setle " ++ getRegLower reg]
+toAsmLine (Setge reg)                = ["setge " ++ getRegLower reg]
+toAsmLine (AndConst reg i)           = ["and " ++ getReg reg ++ ", " ++ show i]
+toAsmLine (Or reg1 reg2)             = ["or " ++ getReg reg1 ++ ", " ++ getReg reg2]
+toAsmLine (Xor reg1 reg2)            = ["xor " ++ getReg reg1 ++ ", " ++ getReg reg2]
+toAsmLine (And reg1 reg2)            = ["and " ++ getReg reg1 ++ ", " ++ getReg reg2]
+toAsmLine (Shl reg)                  = ["shl " ++ getReg reg ++ ", cl"]
+toAsmLine (Shr reg)                  = ["shr " ++ getReg reg ++ ", cl"]
+toAsmLine (Inc reg)                  = ["inc " ++ getReg reg]
+toAsmLine (Dec reg)                  = ["dec " ++ getReg reg]
+toAsmLine (Fadd)                     = ["faddp"]
+toAsmLine (Fsub)                     = ["fsubp"]
+toAsmLine (Fmul)                     = ["fmulp"]
+toAsmLine (Fdiv)                     = ["fdivp"]
+toAsmLine (FldReg reg size)          = ["fld " ++ getSizeWord (toInteger size) ++ " [" ++ getReg reg ++ "]"]
+toAsmLine (FstReg reg size)          = ["fstp " ++ getSizeWord (toInteger size) ++ " [" ++ getReg reg ++ "]"]
+toAsmLine (LoadFloat size i)         = ["fld " ++ getSizeWord (toInteger size) ++ " [?floats + " ++ show i ++ "]"]
 
 retNumLocals :: Scope -> PseudoLine -> PseudoLine
 retNumLocals s (Ret n) = Ret $ show $ (funcGetNumLoc s n)
@@ -130,8 +131,10 @@ getSizeWordData :: Int -> String
 getSizeWordData 1 = "db"
 getSizeWordData 2 = "dw"
 getSizeWordData 4 = "dd"
+getSizeWordData 8 = "dq"
 
 getSizeWord :: Integer -> String
 getSizeWord 1 = "byte"
 getSizeWord 2 = "word"
 getSizeWord 4 = "dword"
+getSizeWord 8 = "qword"
