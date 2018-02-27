@@ -44,7 +44,7 @@ addStrToEnv :: String -> Env -> Env
 addStrToEnv str (xs, r, s, i, f, strs, fl) = (xs, r, s, i, f, str:strs, fl)
 
 envStrLen :: Env -> Int
-envStrLen (_, _, _, _, _, str, _) = foldr (\ a b -> b + length a) 0 str
+envStrLen (_, _, _, _, _, str, _) = foldr (\ a b -> b + length a + 1) 0 str
 
 addFloatToEnv :: Float -> Env -> Env
 addFloatToEnv float (xs, r, s, i, f, str, fl) = (xs, r, s, i, f, str, float:fl)

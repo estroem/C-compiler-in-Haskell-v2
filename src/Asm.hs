@@ -15,7 +15,7 @@ type Asm = [AsmLine]
 toAsm :: Pseudo -> Scope -> [Lit] -> [Float] -> Asm
 toAsm r scope@(Scope gs ss _ _ fs) lits floats = toAsmExtern fs ++ toAsmGlobals fs ++
                                ["section .data"] ++ (map toAsmDataLine $ gs ++ ss) ++
-                               ["section .rodata", "?strings:"] ++ (map toAsmLitLine lits) ++
+                               ["section .rodata", "?strings:"] ++ (map toAsmLitLine $ reverse lits) ++
                                ["?floats:"] ++ (map toAsmFloatLine floats) ++
                                ["section .text"] ++ asm
     where
