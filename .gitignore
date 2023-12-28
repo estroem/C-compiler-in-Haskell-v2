@@ -5,3 +5,7 @@ old/*
 *.c
 *.asm
 *.sh
+*.o
+*.s
+run
+compiler

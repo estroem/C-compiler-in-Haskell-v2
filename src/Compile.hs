@@ -17,7 +17,7 @@ import Env
 compile :: File -> (Pseudo, Scope, [Lit], [Float])
 compile = runCompiler . compileFile
 
-underscore = "_"
+underscore = ""
 
 ----- BASIC MONAD -----
 
@@ -295,7 +295,7 @@ compileExpr (Number x) = ifElseM getFloatFlag floatNum intNum where
 
 compileExpr (Float x) = do
     let typ = fromJust $ getFloatType x
-    LoadFloat 8 <$> addFloatLit x >>= addLine
+    FloatLit 8 <$> addFloatLit x >>= addLine
     return (0, typ)
 
 compileExpr (Name name) = do

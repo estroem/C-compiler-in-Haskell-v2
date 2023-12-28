@@ -31,5 +31,6 @@ main = do
             file <- readFile (args !! 0) >>= preprocess
  --           writeFile (args !! 1) $ show $ parse $ tokenize $ file
             writeFile (args !! 1) $ intercalate "\n" $ run file
-        else
-            putStrLn $ intercalate "\n" $ run $ (head args)
+        else do
+            file <- readFile (args !! 0) >>= preprocess
+            putStrLn $ intercalate "\n" $ run file

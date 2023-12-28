@@ -11,7 +11,7 @@ isStmt s = s /= [] && head s == '#'
 
 evalStmt :: String -> IO String
 evalStmt stmt = do
-    if take 8 stmt == "#include"
+    if (take 8 $ dropWhile (=='\n') stmt) == "#include"
         then readFile (takeWhile (/='"') $ drop 1 $ dropWhile (/='"') stmt)
         else return ""
 

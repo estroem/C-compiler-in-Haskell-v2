@@ -12,6 +12,8 @@ type AsmLine = String
 type Asm = [AsmLine]
 
 
+underscore = ""
+
 toAsm :: Pseudo -> Scope -> [Lit] -> [Float] -> Asm
 toAsm r scope@(Scope gs ss _ _ fs) lits floats = toAsmExtern fs ++ toAsmGlobals fs ++
                                ["section .data"] ++ (map toAsmDataLine $ gs ++ ss) ++
@@ -22,10 +24,10 @@ toAsm r scope@(Scope gs ss _ _ fs) lits floats = toAsmExtern fs ++ toAsmGlobals 
         asm = toAsmLines $ map (retNumLocals scope) r
 
 toAsmGlobals :: [Fun] -> Asm
-toAsmGlobals funs = map (\ f -> "global _" ++ funName f) (filter funIsDef funs)
+toAsmGlobals funs = map (\ f -> "global " ++ underscore ++ funName f) (filter funIsDef funs)
 
 toAsmExtern :: [Fun] -> Asm
-toAsmExtern funs = map (\ f -> "extern _" ++ funName f) (filter (\f -> (not $ funIsDef f) && (not $ any (\f2 -> funName f == funName f2 && funIsDef f2) funs)) funs)
+toAsmExtern funs = map (\ f -> "extern " ++ underscore ++ funName f) (filter (\f -> (not $ funIsDef f) && (not $ any (\f2 -> funName f == funName f2 && funIsDef f2) funs)) funs)
 
 toAsmDataLine :: Var -> AsmLine
 toAsmDataLine (Var n (ArrayType t i) v _) = n ++ ": resw " ++ show i
