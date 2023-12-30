@@ -1,4 +1,8 @@
-.DEFAULT_GOAL := compiler.exe
+ifeq ($(OS),Windows_NT)
+	.DEFAULT_GOAL := compiler.exe
+else
+	.DEFAULT_GOAL := compiler
+endif
 
 clean:
 	rm -f compiler.exe run.exe run.asm run.obj compiler run run.s run.o
