@@ -1,31 +1,27 @@
-module Reg ( Reg, Regs, reg_esp, reg_ebp, reg_eax, reg_ecx, regGet, regTake, regFree ) where
+module Reg ( Reg (..), Regs, regGet, regTake, regFree, allRegs ) where
 
-type Reg = Int
+import Data.List
+
+data Reg = RegEsp | RegEbp | RegEax | RegEbx | RegEcx | RegEdx deriving (Show, Eq)
+
 type Regs = [Reg]
 
-reg_esp :: Int
-reg_ebp :: Int
-reg_eax :: Int
-reg_ecx :: Int
-reg_esp = -1
-reg_ebp = -2
-reg_eax = 0
-reg_ecx = 2
-
 allRegs :: Regs
-allRegs = [0, 1, 2, 3]
+allRegs = [RegEax, RegEbx, RegEcx, RegEdx]
 
-regGet :: Regs -> Reg
-regGet [] = error "No regs available"
-regGet (x:xs) = x
+regGet :: Regs -> (Maybe Reg, Regs)
+regGet rs = case find ( \ r -> regIsTaken r rs) allRegs of
+    (Just r) -> (Just r, filter (/=r) rs)
+    Nothing  -> (Nothing, rs)
 
-regTake :: Reg -> Regs -> Regs
-regTake x xs = a ++ tail b
-    where (a, b) = span (/=x) xs
+regTake :: Reg -> Regs -> Maybe Regs
+regTake r rs = if regIsTaken r rs
+    then Just $ filter (/=r) rs
+    else Nothing
 
 regFree :: Reg -> Regs -> Regs
 regFree x xs
-    | elem x xs = error "Reg already free"
+    | elem x xs = error $ "Reg " ++ (show x) ++ " already free"
     | otherwise = x:xs
 
 regIsTaken :: Reg -> Regs -> Bool

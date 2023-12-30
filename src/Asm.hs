@@ -64,14 +64,14 @@ toAsmLine (Je label)                 = ["je " ++ label]
 toAsmLine (Jne label)                = ["jne " ++ label]
 toAsmLine (Jle label)                = ["jle " ++ label]
 toAsmLine (Jl label)                 = ["jl " ++ label]
-toAsmLine (CallName name args _)     = ["call " ++ name]
-toAsmLine (CallAddr addr args _)     = ["call " ++ getReg addr]
+toAsmLine (CallName name args)       = ["call " ++ name]
+toAsmLine (CallAddr addr args)       = ["call " ++ getReg addr]
 toAsmLine (DeRef reg)                = ["mov " ++ getReg reg ++ ", [" ++ getReg reg ++ "]"]
-toAsmLine (Ret i)                    = (if (read i) > 0 then ["add " ++ getReg reg_esp ++ ", " ++ i] else []) ++ ["pop " ++ getReg reg_ebp, "ret"]
+toAsmLine (Ret i)                    = (if (read i) > 0 then ["add " ++ getReg RegEsp ++ ", " ++ i] else []) ++ ["pop " ++ getReg RegEbp, "ret"]
 toAsmLine (Push reg)                 = ["push " ++ getReg reg]
 toAsmLine (Pop reg)                  = ["pop " ++ getReg reg]
-toAsmLine (LoadLoc reg offset)       = ["mov " ++ getReg reg ++ ", [" ++ getReg reg_ebp ++ (if offset > 0 then "+" else "") ++ show offset ++ "]"]
-toAsmLine (SaveLoc reg offset)       = ["mov [" ++ getReg reg_ebp ++ (if offset > 0 then "+" else "") ++ show offset ++ "], " ++ getReg reg]
+toAsmLine (LoadLoc reg offset)       = ["mov " ++ getReg reg ++ ", [" ++ getReg RegEbp ++ (if offset > 0 then "+" else "") ++ show offset ++ "]"]
+toAsmLine (SaveLoc reg offset)       = ["mov [" ++ getReg RegEbp ++ (if offset > 0 then "+" else "") ++ show offset ++ "], " ++ getReg reg]
 toAsmLine (AddConst reg int)         = ["add " ++ getReg reg ++ ", " ++ show int]
 toAsmLine (SubConst reg int)         = ["sub " ++ getReg reg ++ ", " ++ show int]
 toAsmLine (MulConst reg int)         = ["mul " ++ getReg reg ++ ", " ++ show int]
@@ -79,7 +79,7 @@ toAsmLine (DivConst reg int)         = ["div " ++ getReg reg ++ ", " ++ show int
 toAsmLine (LoadLit reg i)            = ["mov " ++ getReg reg ++ ", ?strings + " ++ show i]
 toAsmLine (MovReg reg1 reg2)         = ["mov " ++ getReg reg1 ++ ", " ++ getReg reg2]
 toAsmLine (Addr reg name)            = ["mov " ++ getReg reg ++ ", " ++ name]
-toAsmLine (AddrLoc reg offset)       = ["lea " ++ getReg reg ++ ", [" ++ getReg reg_ebp ++ (if offset > 0 then "+" else "") ++ show offset ++ "]"]
+toAsmLine (AddrLoc reg offset)       = ["lea " ++ getReg reg ++ ", [" ++ getReg RegEbp ++ (if offset > 0 then "+" else "") ++ show offset ++ "]"]
 toAsmLine (Test reg)                 = ["test " ++ getReg reg ++ ", " ++ getReg reg]
 toAsmLine (Setz reg)                 = ["setz " ++ getRegLower reg]
 toAsmLine (Setl reg)                 = ["setl " ++ getRegLower reg]
@@ -101,9 +101,9 @@ toAsmLine (Fdiv)                     = ["fdivp"]
 toAsmLine (Fld name size)            = ["fld " ++ getSizeWord (toInteger size) ++ " [" ++ name ++ "]"]
 toAsmLine (Fst name size)            = ["fst " ++ getSizeWord (toInteger size) ++ " [" ++ name ++ "]"]
 toAsmLine (Fstp name size)           = ["fstp " ++ getSizeWord (toInteger size) ++ " [" ++ name ++ "]"]
-toAsmLine (FldLoc offset size)       = ["fld " ++ getSizeWord (toInteger size) ++ " [" ++ getReg reg_ebp ++ getOffsetAsString offset ++ "]"]
-toAsmLine (FstLoc offset size)       = ["fst " ++ getSizeWord (toInteger size) ++ " [" ++ getReg reg_ebp ++ getOffsetAsString offset ++ "]"]
-toAsmLine (FstpLoc offset size)      = ["fstp " ++ getSizeWord (toInteger size) ++ " [" ++ getReg reg_ebp ++ getOffsetAsString offset ++ "]"]
+toAsmLine (FldLoc offset size)       = ["fld " ++ getSizeWord (toInteger size) ++ " [" ++ getReg RegEbp ++ getOffsetAsString offset ++ "]"]
+toAsmLine (FstLoc offset size)       = ["fst " ++ getSizeWord (toInteger size) ++ " [" ++ getReg RegEbp ++ getOffsetAsString offset ++ "]"]
+toAsmLine (FstpLoc offset size)      = ["fstp " ++ getSizeWord (toInteger size) ++ " [" ++ getReg RegEbp ++ getOffsetAsString offset ++ "]"]
 toAsmLine (FstpReg reg offset size)  = ["fstp " ++ getSizeWord (toInteger size) ++ " [" ++ getReg reg ++ getOffsetAsString offset ++ "]"]
 toAsmLine (Fild reg offset size)     = ["fild " ++ getSizeWord (toInteger size) ++ " [" ++ getReg reg ++ getOffsetAsString offset ++ "]"]
 toAsmLine (LoadFloat size i)         = ["fld " ++ getSizeWord (toInteger size) ++ " [?floats + " ++ show i ++ "]"]
@@ -122,13 +122,12 @@ funcGetNumLoc :: Scope -> String -> Int
 funcGetNumLoc (Scope _ _ _ _ fs) n = numLocals $ fromJust $ find (\f -> (funName f) == n) fs
 
 getReg :: Reg -> String
-getReg (-3) = "eax"
-getReg (-2) = "ebp"
-getReg (-1) = "esp"
-getReg 0 = "eax"
-getReg 1 = "ebx"
-getReg 2 = "ecx"
-getReg 3 = "edx"
+getReg RegEbp = "ebp"
+getReg RegEsp = "esp"
+getReg RegEax = "eax"
+getReg RegEbx = "ebx"
+getReg RegEcx = "ecx"
+getReg RegEdx = "edx"
 
 getPartialReg :: Integer -> Reg -> String
 getPartialReg 1 r = (getReg r) !! 1 : "l"

@@ -7,7 +7,7 @@ import qualified Id
 
 data Env = E {
     envAsm    :: Pseudo,
-    envReg    :: Reg,
+    envFreeRegs :: Regs,
     envScope  :: Scope,
     envId     :: Id.Id,
     envFF     :: Bool,
@@ -15,10 +15,8 @@ data Env = E {
     envFloats :: [Float]
 } deriving (Show)
 
-startReg = 0
-
 emptyEnv :: Env
-emptyEnv = E [] startReg emptyScope ([], 0) False [] []
+emptyEnv = E [] allRegs emptyScope ([], 0) False [] []
 
 envGetResult :: Env -> (Pseudo, Scope, [Lit], [Float])
 envGetResult e = (envAsm e, envScope e, envStrs e, envFloats e)
@@ -26,14 +24,11 @@ envGetResult e = (envAsm e, envScope e, envStrs e, envFloats e)
 envGetAsm :: Env -> Pseudo
 envGetAsm = envAsm
 
-getRegFromEnv :: Env -> Reg
-getRegFromEnv = envReg
+envGetReg :: Env -> (Maybe Reg, Env)
+envGetReg e = let (r, rs) = regGet $ envFreeRegs e in (r, e { envFreeRegs = rs })
 
-nextReg :: Env -> Env
-nextReg e = e { envReg = envReg e + 1 }
-
-envFreeReg :: Env -> Env
-envFreeReg e = if envReg e == 0 then error "Trying to free reg, but all are free already" else e { envReg = envReg e - 1 }
+envFreeReg :: Reg -> Env -> Env
+envFreeReg r e = e { envFreeRegs = (regFree r $ envFreeRegs e) }
 
 addLineToEnv :: PseudoLine -> Env -> Env
 addLineToEnv line e = e { envAsm = envAsm e ++ [line] }

@@ -25,8 +25,8 @@ data PseudoLine =
     | Jle   String
     | Jl    String
     
-    | CallName  String [Reg] Reg
-    | CallAddr  Reg [Reg] Reg
+    | CallName  String [Reg]
+    | CallAddr  Reg [Reg]
     | FuncStart String
     | FuncEnd   String
     | Ret       String

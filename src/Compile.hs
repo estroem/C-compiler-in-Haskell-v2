@@ -97,13 +97,17 @@ setState :: Env -> Compiler ()
 setState env = C $ \ _ -> Left (env, ())
 
 getReg :: Compiler Reg
-getReg = C $ \ env -> Left (nextReg env, getRegFromEnv env)
+getReg = C $ \ env -> let (reg, newEnv) = envGetReg env in Left (newEnv, fromJust $ reg)
 
-freeReg :: Compiler ()
-freeReg = C $ \ env -> Left (envFreeReg env, ())
+freeRegM :: Maybe Reg -> Compiler ()
+freeRegM (Just reg) = freeReg reg
+freeRegM Nothing    = C $ \ env -> Left (env, ())
+
+freeReg :: Reg -> Compiler ()
+freeReg reg = C $ \ env -> Left (envFreeReg reg env, ())
 
 borrowReg :: Compiler Reg
-borrowReg = C $ \ env -> Left (env, getRegFromEnv env)
+borrowReg = C $ \ env -> Left (env, fromJust $ fst $ envGetReg env)
 
 varExists :: String -> Compiler Bool
 varExists str = getScope >>= return . flip scopeHasVar str
@@ -190,7 +194,7 @@ setFloatFlag b = C $ \ env -> Left (envSetFloat b env, ())
 compileFile :: File -> Compiler ()
 compileSymb :: Symb -> Compiler ()
 compileStmt :: Stmt -> Compiler ()
-compileExpr :: Expr -> Compiler (Reg, Type)
+compileExpr :: Expr -> Compiler (Maybe Reg, Type)
 
 compileFile (File s) = loop compileSymb s
 
@@ -202,8 +206,8 @@ compileSymb (FunDecl (FuncType retType args) name) = addFun $ Fun name retType a
 compileSymb (Func (FuncType retType args) name body) = do
     let numLocals = countLocals body
     addFun (Fun name retType args True numLocals)
-    addLines [Label $ underscore ++ name, Push reg_ebp, MovReg reg_ebp reg_esp]
-    when (numLocals > 0) $ addLine $ SubConst reg_esp $ toInteger numLocals
+    addLines [Label $ underscore ++ name, Push RegEbp, MovReg RegEbp RegEsp]
+    when (numLocals > 0) $ addLine $ SubConst RegEsp $ toInteger numLocals
     funcId name
     sc <- getScope
     loop addPar $ map (\ (t, n) -> Var n t Nothing True) $ reverse args
@@ -222,16 +226,15 @@ compileStmt (LocVar typ name _ e) = do
     case e of
         Just ex -> do
             (reg, typ) <- compileExpr (App "=" [Name name, ex])
-            if typeIsFloat typ
-                then return ()
-                else freeReg >> return ()
+            freeRegM reg
+            return ()
         Nothing -> return ()
 
 compileStmt (If cond st1 st2) = do
     (reg, _) <- compileExpr cond
     id <- addIfId >> getIdString
-    addLine $ Cmp reg
-    freeReg
+    addLine $ Cmp $ fromJust reg
+    freeRegM reg
     addLine $ Je $ id ++ ".else"
     compileStmt st1
     addLine $ Jmp $ id ++ ".end"
@@ -244,8 +247,8 @@ compileStmt (While cond body) = do
     id <- addLoopId >> getIdString
     addLine $ Label $ id ++ ".start"
     (reg, _) <- compileExpr cond
-    addLine $ Cmp reg
-    freeReg
+    addLine $ Cmp $fromJust reg
+    freeRegM reg
     addLine $ Je $ id ++ ".end"
     compileStmt body
     addLine $ Jmp $ id ++ ".start"
@@ -260,8 +263,8 @@ compileStmt (For pre cond post body) = do
     compileExpr post
     addLine $ Label $ id ++ ".cond"
     (reg, _) <- compileExpr cond
-    addLine $ Cmp reg
-    freeReg
+    addLine $ Cmp $ fromJust reg
+    freeRegM reg
     addLine $ Je $ id ++ ".end"
     compileStmt body
     addLine $ Jmp $ id ++ ".start"
@@ -280,41 +283,41 @@ compileStmt (Return (Just e)) = do
     id <- getFuncId
     retType <- funRetType <$> getFun id
     tryCast retType typ
-    when (reg /= reg_eax) $ addLine $ MovReg reg_eax reg
+    when (isJust reg && (fromJust reg) /= RegEax) $addLine $ MovReg RegEax $ fromJust reg
     addLine $ Ret id
-    freeReg
+    freeRegM reg
 
-compileStmt (Expr expr) = compileExpr expr >> freeReg >> return ()
+compileStmt (Expr expr) = compileExpr expr >>= freeRegM . fst >> return ()
 
 compileExpr (Literal s) = do
     reg <- getReg
     LoadLit reg <$> addStringLit s >>= addLine
-    return (reg, PtrType $ PrimType "char")
+    return (Just reg, PtrType $ PrimType "char")
 
 compileExpr (Number x) = ifElseM getFloatFlag floatNum intNum where
     intNum = do
         reg <- getReg
         addLine $ Mov reg x
-        return (reg, fromJust $ getIntType x)
+        return (Just reg, fromJust $ getIntType x)
     floatNum = compileExpr (Float $ fromIntegral x)
 
 compileExpr (Float x) = do
     let typ = fromJust $ getFloatType x
     LoadFloat 8 <$> addFloatLit x >>= addLine
-    return (0, typ)
+    return (Nothing, typ)
 
 compileExpr (Name name) = do
     t <- getVarType name <|> getFunType name
     if typeIsFloat t
-        then loadLocFloat t >> return (0, t)
+        then loadLocFloat t >> return (Nothing, t)
         else do
-            r <- getReg
-            loadArray t <|> loadLoc r <|> loadFun r <|> loadGlo r
-            return (r, t)
+            if typeIsArray t
+                then compileExpr (App "&" [Name name])
+                else do
+                    r <- getReg
+                    loadLoc r <|> loadFun r <|> loadGlo r
+                    return (Just r, t)
     where
-    loadArray t = do
-        failIf (not $ typeIsArray t) ""
-        void $ freeReg >> compileExpr (App "&" [Name name])
     loadLoc r = do 
         i <- getVarOffset name
         addLine $ LoadLoc r $ toInteger i
@@ -330,7 +333,7 @@ compileExpr (App "&" [Name name]) = do
         <|> (getVarType name <* (addLine $ Addr reg name))
         <|> (getFunType name <* (addLine $ Addr reg $ underscore ++ name))
         <|> failure "Can only get address of l-value"
-    return (reg, PtrType typ)
+    return (Just reg, PtrType typ)
 
 compileExpr (App "+=" [expr1, expr2]) = compileExpr $ App "=" [expr1, App "+" [expr1, expr2]]
 compileExpr (App "-=" [expr1, expr2]) = compileExpr $ App "=" [expr1, App "-" [expr1, expr2]]
@@ -342,7 +345,7 @@ compileExpr (App "=" [Name name, expr]) = do
     (reg, typ) <- if typeIsFloat varTyp then (float varTyp $ compileExpr expr) else compileExpr expr
     if typeIsFloat typ
         then saveLocFloat name typ
-        else saveLoc name typ reg
+        else saveLoc name typ $ fromJust reg
     return (reg, typ)
     where
         saveLocFloat name typ = do
@@ -353,49 +356,49 @@ compileExpr (App "=" [Name name, expr]) = do
             
 
 compileExpr (App "=" [App "$" [addrExpr], valueExpr]) = do
-    (addrReg, ptrTyp)    <- compileExpr addrExpr
-    (valueReg, valueTyp) <- compileExpr valueExpr
+    (addrReg, ptrTyp)    <- unwrapReg <$> compileExpr addrExpr
+    (valueReg, valueTyp) <- unwrapReg <$> compileExpr valueExpr
     addrTyp              <- deref ptrTyp
     tryCast addrTyp valueTyp
     addLine $ SaveToPtr addrReg valueReg $ toInteger $ getTypeSize addrTyp
-    freeReg
-    return (addrReg, addrTyp)
+    freeReg valueReg
+    return (Just addrReg, addrTyp)
 
 compileExpr (App "=" [ArrayDeref addrExpr iEx, expr]) = do
-    (addrReg, ptrTyp)    <- compileExpr addrExpr
-    (valueReg, valueTyp) <- compileExpr expr
-    (iReg, iTyp)         <- compileExpr iEx
+    (addrReg, ptrTyp)    <- unwrapReg <$> compileExpr addrExpr
+    (valueReg, valueTyp) <- unwrapReg <$> compileExpr expr
+    (iReg, iTyp)         <- unwrapReg <$> compileExpr iEx
     addrTyp              <- deref ptrTyp
     tryCast addrTyp valueTyp
     fixPtrOffset iReg addrTyp
     failIf (not $ typeIsInt iTyp) "Array index must be int"
     addLine $ Add addrReg iReg
     addLine $ SaveToPtr addrReg valueReg $ toInteger $ getTypeSize addrTyp
-    freeReg
-    freeReg
-    return (addrReg, addrTyp)
+    freeReg valueReg
+    freeReg valueReg
+    return (Just addrReg, addrTyp)
 
 compileExpr (App "++" [expr]) = compileExpr $ App "=" [expr, App "+" [expr, Number 1]]
 compileExpr (App "--" [expr]) = compileExpr $ App "=" [expr, App "-" [expr, Number 1]]
 
 compileExpr (App "+++" [expr]) = do
-    (reg, typ) <- compileExpr $ App "=" [expr, App "+" [expr, Number 1]]
+    (reg, typ) <- unwrapReg <$> (compileExpr $ App "=" [expr, App "+" [expr, Number 1]])
     addLine $ Dec reg
-    return (reg, typ)
+    return (Just reg, typ)
 
 compileExpr (App "---" [expr]) = do
-    (reg, typ) <- compileExpr $ App "=" [expr, App "-" [expr, Number 1]]
+    (reg, typ) <- unwrapReg <$> (compileExpr $ App "=" [expr, App "-" [expr, Number 1]])
     addLine $ Inc reg
-    return (reg, typ)
+    return (Just reg, typ)
 
 compileExpr (App sym [expr]) = do
-    (reg, typ) <- compileExpr expr
+    (reg, typ) <- unwrapReg <$> compileExpr expr
     let retType = getType sym typ undefined
     failIf (retType == Nothing) "Incompatible type"
     case sym of
         "$" -> addLine $ DeRef reg
         "!" -> addLines [Test reg, Setz reg, AndConst reg 1]
-    return (reg, fromJust retType)
+    return (Just reg, fromJust retType)
 
 compileExpr (App sym [expr1, expr2]) = do
     type1 <- getExprType $ compileExpr expr1
@@ -405,76 +408,75 @@ compileExpr (App sym [expr1, expr2]) = do
         then do
             let retType = getType sym type1 type2
             failIf (retType == Nothing) "Incompatible types"
-            (reg1, typ1) <- float (fromJust retType) $ compileExpr expr1
-            (reg2, typ2) <- float (fromJust retType) $ compileExpr expr2
+            (_, typ1) <- float (fromJust retType) $ compileExpr expr1
+            (_, typ2) <- float (fromJust retType) $ compileExpr expr2
             floatExpr sym type1 type2
         else do
-            e1 <- compileExpr expr1
-            e2 <- compileExpr expr2
+            e1 <- unwrapReg <$> compileExpr expr1
+            e2 <- unwrapReg <$> compileExpr expr2
             intExpr sym e1 e2
 
 compileExpr (ArrayDeref ex i) = do
-    (reg, typ) <- compileExpr ex
+    (reg, typ) <- unwrapReg <$> compileExpr ex
     newTyp <- deref typ
-    (iReg, iTyp) <- compileExpr i
+    (iReg, iTyp) <- unwrapReg <$> compileExpr i
     failIf (not $ typeIsInt iTyp) $ "Array index must be integer"
     fixPtrOffset iReg typ
     addLines [Add reg iReg, DeRef reg]
-    freeReg
-    return (reg, newTyp)
+    freeReg iReg
+    return (Just reg, newTyp)
 
 compileExpr (Ternary cond expr1 expr2) = do
-    (reg, _) <- compileExpr cond
+    (reg, _) <- unwrapReg <$> compileExpr cond
     id <- addIfId >> getIdString
     addLine $ Cmp reg
-    freeReg
+    freeReg reg
     addLine $ Je $ id ++ ".else"
-    (reg2, typ2) <- compileExpr expr1
+    (reg2, typ2) <- unwrapReg <$> compileExpr expr1
     addLine $ Jmp $ id ++ ".end"
     addLine $ Label $ id ++ ".else"
-    (reg3, typ3) <- compileExpr expr2
+    (reg3, typ3) <- unwrapReg <$> compileExpr expr2
     addLine $ MovReg reg2 reg3
     addLine $ Label $ id ++ ".end"
-    freeReg
+    freeReg reg3
     popId
-    return (reg2, typ2)
+    return (Just reg2, typ2)
 
 compileExpr c@(Call ex args) = callByName c <|> callByAddr c
 
 callByName (Call (Name name) args) = do
     retType <- funRetType <$> getFun name
     reg     <- borrowReg
-    when (reg /= reg_eax) $ addLine $ Push reg_eax -- freeReg0
+    when (reg /= RegEax) $ addLine $ Push RegEax -- freeRegM0
     size <- handleCallArgs args
     _    <- getReg
-    addLine $ CallName (underscore ++ name) [] 0
-    when (length args > 0) $ addLine $ AddConst reg_esp $ toInteger size
-    when (reg /= reg_eax) $ addLines [MovReg reg reg_eax, Pop reg_eax] -- getReg0
-    return (reg, retType)
+    addLine $ CallName (underscore ++ name) []
+    when (length args > 0) $ addLine $ AddConst RegEsp $ toInteger size
+    when (reg /= RegEax) $ addLines [MovReg reg RegEax, Pop RegEax] -- getReg0
+    return (Just reg, retType)
 
 callByAddr (Call ex args) = do
-    (reg, typ) <- compileExpr ex
+    (reg, typ) <- unwrapReg <$> compileExpr ex
     case typ of
         (PtrType (FuncType _ _)) -> return ()
         _ -> failure $ (show typ) ++ "Not a pointer to a function"
-    when (reg /= reg_eax) $ addLine $ Push reg_eax
+    when (reg /= RegEax) $ addLine $ Push RegEax
     size <- handleCallArgs args
-    addLine $ CallAddr reg [] 0
-    when (length args > 0) $ addLine $ AddConst reg_esp $ toInteger size
-    when (reg /= reg_eax) $ addLines [MovReg reg reg_eax, Pop reg_eax]
-    return (reg, typ)
+    addLine $ CallAddr reg []
+    when (length args > 0) $ addLine $ AddConst RegEsp $ toInteger size
+    when (reg /= RegEax) $ addLines [MovReg reg RegEax, Pop RegEax]
+    return (Just reg, typ)
 
 handleCallArgs :: [Expr] -> Compiler Int
 handleCallArgs = foldM (\ a b -> (+a) <$> (pushFloat a b <|> push b)) 0 . reverse where
     pushFloat offset e = do
         ts <- getTypeSize <$> snd <$> isFloat (compileExpr e)
-        addLines [SubConst reg_esp (toInteger ts), FstpReg reg_esp offset ts]
+        addLines [SubConst RegEsp (toInteger ts), FstpReg RegEsp offset ts]
         return ts
     push e = do
-        (r, t) <- compileExpr e
-        traceM $ show e
+        (r, t) <- unwrapReg <$> compileExpr e
         addLine $ Push r
-        freeReg
+        freeReg r
         if getTypeSize t < 4
             then return 4
             else return $ getTypeSize t
@@ -509,10 +511,10 @@ intExpr sym (reg1, type1) (reg2, type2) = do
         "|" -> addLine $ Or reg1 reg2
         "^" -> addLine $ Xor reg1 reg2
         "&" -> addLine $ And reg1 reg2
-        "<<" -> addLines [Push reg_ecx, MovReg reg_ecx reg2, Shl reg1, Pop reg_ecx]
-        ">>" -> addLines [Push reg_ecx, MovReg reg_ecx reg2, Shr reg1, Pop reg_ecx]
-    freeReg
-    return (reg1, fromJust retType)
+        "<<" -> addLines [Push RegEcx, MovReg RegEcx reg2, Shl reg1, Pop RegEcx]
+        ">>" -> addLines [Push RegEcx, MovReg RegEcx reg2, Shr reg1, Pop RegEcx]
+    freeReg reg2
+    return (Just reg1, fromJust retType)
 
 floatExpr sym type1 type2 = do
     let retType = getType sym type1 type2
@@ -523,19 +525,18 @@ floatExpr sym type1 type2 = do
         "*"  -> addLine Fmul
         "/"  -> addLine Fdiv
         "==" -> addLine Feq
-    reg <- getReg
-    return (reg, fromJust retType)
+    return (Nothing, fromJust retType)
 
-getExprType :: Compiler (Reg, Type) -> Compiler Type
+getExprType :: Compiler (Maybe Reg, Type) -> Compiler Type
 getExprType c = getState >>= \ s -> snd <$> c <* setState s
 
-isFloat :: Compiler (Reg, Type) -> Compiler (Reg, Type)
+isFloat :: Compiler (Maybe Reg, Type) -> Compiler (Maybe Reg, Type)
 isFloat = cond (typeIsFloat . snd)
 
 isInt :: Compiler (Reg, Type) -> Compiler (Reg, Type)
 isInt = cond (typeIsInt . snd)
 
-float :: Type -> Compiler (Reg, Type) -> Compiler (Reg, Type)
+float :: Type -> Compiler (Maybe Reg, Type) -> Compiler (Maybe Reg, Type)
 float t c = do
     setFloatFlag True
     res <- c
@@ -546,15 +547,15 @@ float t c = do
 tryCast :: Type -> Type -> Compiler ()
 tryCast l r = failIf (not $ canCast l r)  $ "Cannot autocast from " ++ show r ++ " to " ++ show l
 
-cast :: Type -> (Reg, Type) -> Compiler (Reg, Type)
+cast :: Type -> (Maybe Reg, Type) -> Compiler (Maybe Reg, Type)
 cast targetType (reg, sourceType) = do
     tryCast targetType sourceType
     if typeIsFloat targetType && not (typeIsFloat sourceType)
         then do
-            addLine $ Push reg 
-            addLine $ Fild reg_esp 0 $ getTypeSize sourceType
-            addLine $ AddConst reg_esp 4
-            return (0, targetType)
+            addLine $ Push $ fromJust reg
+            addLine $ Fild RegEsp 0 $ getTypeSize sourceType
+            addLine $ AddConst RegEsp 4
+            return (Nothing, targetType)
         else return (reg, targetType)
 
 deref :: Type -> Compiler Type
@@ -576,3 +577,7 @@ endsOnRet [] = False
 endsOnRet ([Return _]) = True
 endsOnRet ([Block b]) = endsOnRet b
 endsOnRet (x:xs) = endsOnRet xs
+
+unwrapReg :: (Maybe Reg, Type) -> (Reg, Type)
+unwrapReg ((Just reg), typ) = (reg, typ)
+unwrapReg (Nothing, _) = error "Could not unwrap reg"
