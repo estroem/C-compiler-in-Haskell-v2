@@ -315,10 +315,16 @@ cond f p = do
             failure
     
 int :: Parser Integer
-int = read <$> cond (all isDigit) single
+int = read <$> cond isInt single
+
+isInt :: String -> Bool
+isInt (x:xs) = (x == '-' || isDigit x) && (all isDigit xs)
 
 floatnum :: Parser Float
-floatnum = read <$> cond (all $ \ t -> isDigit t || t == '.') single
+floatnum = read <$> cond isFloat single
+
+isFloat :: String -> Bool
+isFloat (x:xs) = (x == '-' || isDigit x) && all (\ t -> isDigit t || t == '.') xs
 
 string :: String -> Parser String
 string s = cond (==s) single
