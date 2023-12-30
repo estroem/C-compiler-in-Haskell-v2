@@ -2,6 +2,7 @@ module Parse ( parse ) where
 
 import Data.Char
 import Data.List
+import Debug.Trace
 
 import Tokenize
 import Ast

@@ -304,10 +304,13 @@ compileExpr (Float x) = do
     return (0, typ)
 
 compileExpr (Name name) = do
-    r <- getReg
     t <- getVarType name <|> getFunType name
-    loadArray t <|> loadLoc r <|> loadFun r <|> loadGlo r <|> loadLocFloat t
-    return (r, t)
+    if typeIsFloat t
+        then loadLocFloat t >> return (0, t)
+        else do
+            r <- getReg
+            loadArray t <|> loadLoc r <|> loadFun r <|> loadGlo r
+            return (r, t)
     where
     loadArray t = do
         failIf (not $ typeIsArray t) ""
@@ -335,13 +338,12 @@ compileExpr (App "*=" [expr1, expr2]) = compileExpr $ App "=" [expr1, App "*" [e
 compileExpr (App "/=" [expr1, expr2]) = compileExpr $ App "=" [expr1, App "/" [expr1, expr2]]
     
 compileExpr (App "=" [Name name, expr]) = do
-    (reg, typ) <- compileExpr expr
     varTyp     <- getVarType name
-    tryCast varTyp typ
-    if typeIsFloat varTyp
-        then saveLocFloat name varTyp
-        else saveLoc name varTyp reg
-    return (reg, varTyp)
+    (reg, typ) <- if typeIsFloat varTyp then (float varTyp $ compileExpr expr) else compileExpr expr
+    if typeIsFloat typ
+        then saveLocFloat name typ
+        else saveLoc name typ reg
+    return (reg, typ)
     where
         saveLocFloat name typ = do
             offset <- getVarOffset name
@@ -401,8 +403,10 @@ compileExpr (App sym [expr1, expr2]) = do
     fl    <- getFloatFlag
     if fl || typeIsFloat type1 || typeIsFloat type2
         then do
-            float $ compileExpr expr1
-            float $ compileExpr expr2
+            let retType = getType sym type1 type2
+            failIf (retType == Nothing) "Incompatible types"
+            (reg1, typ1) <- float (fromJust retType) $ compileExpr expr1
+            (reg2, typ2) <- float (fromJust retType) $ compileExpr expr2
             floatExpr sym type1 type2
         else do
             e1 <- compileExpr expr1
@@ -468,6 +472,7 @@ handleCallArgs = foldM (\ a b -> (+a) <$> (pushFloat a b <|> push b)) 0 . revers
         return ts
     push e = do
         (r, t) <- compileExpr e
+        traceM $ show e
         addLine $ Push r
         freeReg
         if getTypeSize t < 4
@@ -512,13 +517,13 @@ intExpr sym (reg1, type1) (reg2, type2) = do
 floatExpr sym type1 type2 = do
     let retType = getType sym type1 type2
     failIf (retType == Nothing) "Incompatible types"
-    reg <- ifElseM (return $ not $ typeIsFloat $ fromJust retType) getReg $ return undefined
     case sym of
         "+"  -> addLine Fadd
         "-"  -> addLine Fsub
         "*"  -> addLine Fmul
         "/"  -> addLine Fdiv
         "==" -> addLine Feq
+    reg <- getReg
     return (reg, fromJust retType)
 
 getExprType :: Compiler (Reg, Type) -> Compiler Type
@@ -530,11 +535,27 @@ isFloat = cond (typeIsFloat . snd)
 isInt :: Compiler (Reg, Type) -> Compiler (Reg, Type)
 isInt = cond (typeIsInt . snd)
 
-float :: Compiler (Reg, Type) -> Compiler (Reg, Type)
-float c = setFloatFlag True *> c <* setFloatFlag False
+float :: Type -> Compiler (Reg, Type) -> Compiler (Reg, Type)
+float t c = do
+    setFloatFlag True
+    res <- c
+    cast t res
+    setFloatFlag False
+    return res
 
 tryCast :: Type -> Type -> Compiler ()
 tryCast l r = failIf (not $ canCast l r)  $ "Cannot autocast from " ++ show r ++ " to " ++ show l
+
+cast :: Type -> (Reg, Type) -> Compiler (Reg, Type)
+cast targetType (reg, sourceType) = do
+    tryCast targetType sourceType
+    if typeIsFloat targetType && not (typeIsFloat sourceType)
+        then do
+            addLine $ Push reg 
+            addLine $ Fild reg_esp 0 $ getTypeSize sourceType
+            addLine $ AddConst reg_esp 4
+            return (0, targetType)
+        else return (reg, targetType)
 
 deref :: Type -> Compiler Type
 deref = maybe (failure "Cannot deref non-pointer") return . getPtrType

@@ -33,7 +33,7 @@ nextReg :: Env -> Env
 nextReg e = e { envReg = envReg e + 1 }
 
 envFreeReg :: Env -> Env
-envFreeReg e = e { envReg = envReg e - 1 }
+envFreeReg e = if envReg e == 0 then error "Trying to free reg, but all are free already" else e { envReg = envReg e - 1 }
 
 addLineToEnv :: PseudoLine -> Env -> Env
 addLineToEnv line e = e { envAsm = envAsm e ++ [line] }

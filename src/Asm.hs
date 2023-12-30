@@ -18,7 +18,7 @@ toAsm :: Pseudo -> Scope -> [Lit] -> [Float] -> Asm
 toAsm r scope@(Scope gs ss _ _ fs) lits floats = toAsmExtern fs ++ toAsmGlobals fs ++
                                ["section .data"] ++ (map toAsmDataLine $ gs ++ ss) ++
                                ["section .rodata", "?strings:"] ++ (map toAsmLitLine $ reverse lits) ++
-                               ["?floats:"] ++ (map toAsmFloatLine floats) ++
+                               ["?floats:"] ++ (map toAsmFloatLine $ reverse floats) ++
                                ["section .text"] ++ asm
     where
         asm = toAsmLines $ map (retNumLocals scope) r
@@ -101,11 +101,15 @@ toAsmLine (Fdiv)                     = ["fdivp"]
 toAsmLine (Fld name size)            = ["fld " ++ getSizeWord (toInteger size) ++ " [" ++ name ++ "]"]
 toAsmLine (Fst name size)            = ["fst " ++ getSizeWord (toInteger size) ++ " [" ++ name ++ "]"]
 toAsmLine (Fstp name size)           = ["fstp " ++ getSizeWord (toInteger size) ++ " [" ++ name ++ "]"]
-toAsmLine (FldLoc offset size)       = ["fld " ++ getSizeWord (toInteger size) ++ " [" ++ getReg reg_ebp ++ (if offset /= 0 then ((if offset > 0 then "+" else "") ++ show offset) else "") ++ "]"]
-toAsmLine (FstLoc offset size)       = ["fst " ++ getSizeWord (toInteger size) ++ " [" ++ getReg reg_ebp ++ (if offset /= 0 then ((if offset > 0 then "+" else "") ++ show offset) else "") ++ "]"]
-toAsmLine (FstpLoc offset size)      = ["fstp " ++ getSizeWord (toInteger size) ++ " [" ++ getReg reg_ebp ++ (if offset /= 0 then ((if offset > 0 then "+" else "") ++ show offset) else "") ++ "]"]
-toAsmLine (FstpReg reg offset size)  = ["fstp " ++ getSizeWord (toInteger size) ++ " [" ++ getReg reg ++ (if offset /= 0 then ((if offset > 0 then "+" else "") ++ show offset) else "") ++ "]"]
+toAsmLine (FldLoc offset size)       = ["fld " ++ getSizeWord (toInteger size) ++ " [" ++ getReg reg_ebp ++ getOffsetAsString offset ++ "]"]
+toAsmLine (FstLoc offset size)       = ["fst " ++ getSizeWord (toInteger size) ++ " [" ++ getReg reg_ebp ++ getOffsetAsString offset ++ "]"]
+toAsmLine (FstpLoc offset size)      = ["fstp " ++ getSizeWord (toInteger size) ++ " [" ++ getReg reg_ebp ++ getOffsetAsString offset ++ "]"]
+toAsmLine (FstpReg reg offset size)  = ["fstp " ++ getSizeWord (toInteger size) ++ " [" ++ getReg reg ++ getOffsetAsString offset ++ "]"]
+toAsmLine (Fild reg offset size)     = ["fild " ++ getSizeWord (toInteger size) ++ " [" ++ getReg reg ++ getOffsetAsString offset ++ "]"]
 toAsmLine (LoadFloat size i)         = ["fld " ++ getSizeWord (toInteger size) ++ " [?floats + " ++ show i ++ "]"]
+
+getOffsetAsString :: Int -> String
+getOffsetAsString off = if off /= 0 then ((if off > 0 then "+" else "") ++ show off) else ""
 
 retNumLocals :: Scope -> PseudoLine -> PseudoLine
 retNumLocals s (Ret n) = Ret $ show $ (funcGetNumLoc s n)

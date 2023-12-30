@@ -74,6 +74,7 @@ data PseudoLine =
     | FstLoc       Int Int
     | FstpLoc      Int Int
     | FstpReg      Reg Int Int -- reg offset size
+    | Fild         Reg Int Int -- reg offset size
     | LoadFloat    Int Int
     | LoadLocFloat Int Int
     
