@@ -13,7 +13,7 @@ data Env = E {
     envFF     :: Bool,
     envStrs   :: [Lit],
     envFloats :: [Float]
-}
+} deriving (Show)
 
 startReg = 0
 

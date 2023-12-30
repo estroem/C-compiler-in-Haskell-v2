@@ -4,6 +4,7 @@ import Data.Maybe
 import Data.List
 import Control.Monad
 import Control.Applicative
+import Debug.Trace
 
 import Scope
 import Reg
@@ -219,7 +220,11 @@ compileStmt (Block body) = do
 compileStmt (LocVar typ name _ e) = do
     addLoc $ Var name typ Nothing True
     case e of
-        Just ex -> compileExpr (App "=" [Name name, ex]) >> freeReg >> return ()
+        Just ex -> do
+            (reg, typ) <- compileExpr (App "=" [Name name, ex])
+            if typeIsFloat typ
+                then return ()
+                else freeReg >> return ()
         Nothing -> return ()
 
 compileStmt (If cond st1 st2) = do
@@ -295,13 +300,13 @@ compileExpr (Number x) = ifElseM getFloatFlag floatNum intNum where
 
 compileExpr (Float x) = do
     let typ = fromJust $ getFloatType x
-    FloatLit 8 <$> addFloatLit x >>= addLine
+    LoadFloat 8 <$> addFloatLit x >>= addLine
     return (0, typ)
 
 compileExpr (Name name) = do
     r <- getReg
     t <- getVarType name <|> getFunType name
-    loadArray t <|> loadLoc r <|> loadFun r <|> loadGlo r
+    loadArray t <|> loadLoc r <|> loadFun r <|> loadGlo r <|> loadLocFloat t
     return (r, t)
     where
     loadArray t = do
@@ -312,6 +317,9 @@ compileExpr (Name name) = do
         addLine $ LoadLoc r $ toInteger i
     loadGlo r = getVarType name >> (addLine $ Load r name)
     loadFun r = getFunType name >> (addLine $ Load r $ underscore ++ name)
+    loadLocFloat typ = do 
+        i <- getVarOffset name
+        addLine $ FldLoc i $ getTypeSize typ
 
 compileExpr (App "&" [Name name]) = do
     reg <- getReg
@@ -330,9 +338,17 @@ compileExpr (App "=" [Name name, expr]) = do
     (reg, typ) <- compileExpr expr
     varTyp     <- getVarType name
     tryCast varTyp typ
-    (SaveLoc reg <$> toInteger <$> getVarOffset name >>= addLine)
-        <|> (addLine $ Save name reg $ toInteger $ getTypeSize varTyp)
+    if typeIsFloat varTyp
+        then saveLocFloat name varTyp
+        else saveLoc name varTyp reg
     return (reg, varTyp)
+    where
+        saveLocFloat name typ = do
+            offset <- getVarOffset name
+            addLine (FstLoc offset 8)
+        saveLoc name typ reg = (SaveLoc reg <$> toInteger <$> getVarOffset name >>= addLine)
+            <|> (addLine $ Save name reg $ toInteger $ getTypeSize typ)
+            
 
 compileExpr (App "=" [App "$" [addrExpr], valueExpr]) = do
     (addrReg, ptrTyp)    <- compileExpr addrExpr
@@ -445,10 +461,10 @@ callByAddr (Call ex args) = do
     return (reg, typ)
 
 handleCallArgs :: [Expr] -> Compiler Int
-handleCallArgs = foldM (\ a b -> (+a) <$> (pushFloat b <|> push b)) 0 . reverse where
-    pushFloat e = do
+handleCallArgs = foldM (\ a b -> (+a) <$> (pushFloat a b <|> push b)) 0 . reverse where
+    pushFloat offset e = do
         ts <- getTypeSize <$> snd <$> isFloat (compileExpr e)
-        addLines [SubConst reg_esp (toInteger ts), FstReg reg_esp ts]
+        addLines [SubConst reg_esp (toInteger ts), FstpReg reg_esp offset ts]
         return ts
     push e = do
         (r, t) <- compileExpr e

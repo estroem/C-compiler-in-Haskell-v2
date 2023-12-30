@@ -67,10 +67,14 @@ data PseudoLine =
     | Fdiv
     | Feq
     
-    | FldReg       Reg Int
-    | FstReg       Reg Int
-    | FloatLit     Int Int
-    | LoadFloat    Int String
+    | Fld          String Int -- name size
+    | Fst          String Int
+    | Fstp         String Int
+    | FldLoc       Int Int -- offset size
+    | FstLoc       Int Int
+    | FstpLoc      Int Int
+    | FstpReg      Reg Int Int -- reg offset size
+    | LoadFloat    Int Int
     | LoadLocFloat Int Int
     
     deriving (Show)

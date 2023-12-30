@@ -8,6 +8,7 @@
 
 import Data.List
 import System.Environment
+import Debug.Trace
 
 import Preprocess
 import Tokenize
@@ -29,6 +30,7 @@ main = do
     if (length args) == 2
         then do
             file <- readFile (args !! 0) >>= preprocess
+--            print $ compile $ parse $ tokenize $ file
  --           writeFile (args !! 1) $ show $ parse $ tokenize $ file
             writeFile (args !! 1) $ intercalate "\n" $ run file
         else do
