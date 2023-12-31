@@ -37,7 +37,7 @@ addStrToEnv :: String -> Env -> Env
 addStrToEnv str e = e { envStrs = str : envStrs e }
 
 envStrLen :: Env -> Int
-envStrLen = foldr (\ a b -> b + length a + 1) 0 . envStrs
+envStrLen = foldr (\ a b -> b + strLength a + 1) 0 . envStrs
 
 addFloatToEnv :: Float -> Env -> Env
 addFloatToEnv float e = e { envFloats = float : envFloats e }
@@ -62,3 +62,8 @@ envGetFloat = envFF
 
 envSetFloat :: Bool -> Env -> Env
 envSetFloat f e = e { envFF = f }
+
+strLength :: String -> Int
+strLength [] = 0
+strLength ('\\':xs) = strLength xs
+strLength (x:xs) = 1 + strLength xs
