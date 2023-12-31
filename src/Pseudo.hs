@@ -46,10 +46,15 @@ data PseudoLine =
     
     | Test  Reg
     | Setz  Reg
+    | Setnz Reg
     | Setl  Reg
     | Setg  Reg
     | Setle Reg
     | Setge Reg
+    | Seta  Reg
+    | Setb  Reg
+    | Setae Reg
+    | Setbe Reg
     
     | And      Reg Reg
     | AndConst Reg Integer 
@@ -65,7 +70,10 @@ data PseudoLine =
     | Fsub
     | Fmul
     | Fdiv
-    | Feq
+    | Fcom
+    | FnstswAx
+    | Sahf
+    | TestFloat Reg
     
     | Fld          String Int -- name size
     | Fst          String Int

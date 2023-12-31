@@ -406,11 +406,11 @@ compileExpr (App sym [expr1, expr2]) = do
     fl    <- getFloatFlag
     if fl || typeIsFloat type1 || typeIsFloat type2
         then do
-            let retType = getType sym type1 type2
-            failIf (retType == Nothing) "Incompatible types"
-            (_, typ1) <- float (fromJust retType) $ compileExpr expr1
-            (_, typ2) <- float (fromJust retType) $ compileExpr expr2
-            floatExpr sym type1 type2
+            let inputType = getInputType sym type1 type2
+            failIf (inputType == Nothing) "Incompatible types"
+            float (fromJust inputType) $ compileExpr expr2
+            float (fromJust inputType) $ compileExpr expr1
+            floatExpr sym (fromJust inputType) (fromJust inputType)
         else do
             e1 <- unwrapReg <$> compileExpr expr1
             e2 <- unwrapReg <$> compileExpr expr2
@@ -519,13 +519,24 @@ intExpr sym (reg1, type1) (reg2, type2) = do
 floatExpr sym type1 type2 = do
     let retType = getType sym type1 type2
     failIf (retType == Nothing) "Incompatible types"
-    case sym of
-        "+"  -> addLine Fadd
-        "-"  -> addLine Fsub
-        "*"  -> addLine Fmul
-        "/"  -> addLine Fdiv
-        "==" -> addLine Feq
-    return (Nothing, fromJust retType)
+    if typeIsFloat $ fromJust retType
+        then do
+            case sym of
+                "+"  -> addLine Fadd
+                "-"  -> addLine Fsub
+                "*"  -> addLine Fmul
+                "/"  -> addLine Fdiv
+            return (Nothing, fromJust retType)
+        else do
+            reg <- getReg
+            case sym of
+                "==" -> addLines [Fcom, FnstswAx, Sahf, Setz reg, AndConst reg 1]
+                "!=" -> addLines [Fcom, FnstswAx, Sahf, Setnz reg, AndConst reg 1]
+                ">" -> addLines [Fcom, FnstswAx, Sahf, Seta reg, AndConst reg 1]
+                "<" -> addLines [Fcom, FnstswAx, Sahf, Setb reg, AndConst reg 1]
+                ">=" -> addLines [Fcom, FnstswAx, Sahf, Setae reg, AndConst reg 1]
+                "<=" -> addLines [Fcom, FnstswAx, Sahf, Setbe reg, AndConst reg 1]
+            return (Just reg, fromJust retType)
 
 getExprType :: Compiler (Maybe Reg, Type) -> Compiler Type
 getExprType c = getState >>= \ s -> snd <$> c <* setState s

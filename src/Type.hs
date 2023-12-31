@@ -1,4 +1,4 @@
-module Type ( Type (..), getFloatType, getIntType, canCast, getType, getTypeSize, isPrimitive, getPtrType, addType, typeIsFloat, typeIsInt, typeIsArray ) where
+module Type ( Type (..), getFloatType, getIntType, canCast, getType, getInputType, getTypeSize, isPrimitive, getPtrType, addType, typeIsFloat, typeIsInt, typeIsArray ) where
 
 import Data.Maybe
 import Data.List
@@ -98,6 +98,33 @@ biggestType :: String -> String -> String
 biggestType a b = if (f a) >= (f b) then a else b
     where
         f = \ x -> snd $ fromJust $ find ((==x) . fst) prims
+
+getInputType :: String -> Type -> Type -> Maybe Type
+getInputType sym l r = case sym of
+    "+" -> getAddType l r
+    "-" -> getAddType l r
+    "*" -> getMulType l r
+    "/" -> getMulType l r
+    "=" -> Just l
+    "$" -> case l of
+        (PtrType t) -> Just t
+        (ArrayType t _) -> Just t
+        _ -> error "Can not dereference non-pointer type"
+    "&" -> Just $ PtrType l
+    "!=" -> getCompInputType l r
+    "==" -> getCompInputType l r
+    "<" -> getCompInputType l r
+    ">" -> getCompInputType l r
+    "<=" -> getCompInputType l r
+    ">=" -> getCompInputType l r
+    "|" -> if typeIsInt l && typeIsInt r then getAddType l r else Nothing
+    "^" -> if typeIsInt l && typeIsInt r then getAddType l r else Nothing
+    "<<" -> if typeIsInt l && typeIsInt r then Just l else Nothing
+    ">>" -> if typeIsInt l && typeIsInt r then Just l else Nothing
+
+getCompInputType :: Type -> Type -> Maybe Type
+getCompInputType (PrimType l) (PrimType r) = Just $ PrimType $ biggestType l r
+getCompInputType _ _ = Nothing
 
 typeSize :: String -> Integer
 typeSize t = snd $ fromJust $ find ((==t) . fst) prims
