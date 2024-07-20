@@ -1,6 +1,1 @@
-Put C code in run.c and run "make run.exe" to compile test code.
-
-TODO:
-Floats
-Proper register handling
-Structs/Unions
+Put C code in run.c and run "make run" to compile test code. Uses Stack for Haskell compilation
